@@ -1,0 +1,64 @@
+{
+  "name":              "dreamfactory/dfe-api-client",
+  "description":       "DreamFactory Enterprise(tm) Instance API Service Library",
+  "homepage":          "https://www.dreamfactory.com/",
+  "keywords":          [
+    "dreamfactory",
+    "df",
+    "dfe",
+    "client",
+    "api"
+  ],
+  "license":           [
+    "Apache-2.0"
+  ],
+  "type":              "library",
+  "authors":           [
+    {
+      "name":  "Jerry Ablan",
+      "email": "jerryablan@dreamfactory.com"
+    }
+  ],
+  "repositories":      [
+    {
+      "type": "vcs",
+      "url":  "git@github.com:dreamfactorysoftware/dfe-audit.git"
+    },
+    {
+      "type": "vcs",
+      "url":  "git@github.com:dreamfactorysoftware/dfe-database.git"
+    },
+    {
+      "type": "vcs",
+      "url":  "git@github.com:dreamfactorysoftware/dfe-storage.git"
+    },
+    {
+      "type": "vcs",
+      "url":  "git@github.com:dreamfactorysoftware/dfe-common.git"
+    }
+  ],
+  "minimum-stability": "dev",
+  "require":           {
+    "dreamfactory/dfe-common":   "dev-develop as dev-master",
+    "dreamfactory/dfe-database": "dev-develop as dev-master",
+    "guzzlehttp/guzzle":         "~4.0"
+  },
+  "require-dev":       {
+    "doctrine/dbal":   "~2.3",
+    "phpspec/phpspec": "~2.1",
+    "phpunit/phpunit": "~4.0"
+  },
+  "autoload":          {
+    "psr-4": {
+      "DreamFactory\\Enterprise\\Instance\\Ops\\": "src/"
+    }
+  },
+  "config":            {
+    "preferred-install": "dist"
+  },
+  "extra":             {
+    "branch-alias": {
+      "dev-develop": "1.x-dev"
+    }
+  }
+}
