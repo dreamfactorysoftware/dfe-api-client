@@ -50,6 +50,13 @@ class InstanceApiClientService extends BaseService
         $this->token = $this->generateToken($instance->cluster->cluster_id_text, $instance->instance_id_text);
         $this->resourceUri = $instance->getResourceUri();
 
+        $config = array_merge($config,
+            [
+                'headers' => [
+                    EnterpriseDefaults::CONSOLE_X_HEADER => $this->token,
+                ],
+            ]);
+
         return $this->createClient($instance->getProvisionedEndpoint(), $config);
     }
 
@@ -60,7 +67,8 @@ class InstanceApiClientService extends BaseService
      */
     public function resources()
     {
-        return $this->get('/');
+        //  Return all system resources
+        return $this->get();
     }
 
     /**
@@ -77,13 +85,13 @@ class InstanceApiClientService extends BaseService
     }
 
     /**
-     * @param string $uri
-     * @param array  $payload
-     * @param array  $options
+     * @param string|null $uri
+     * @param array       $payload
+     * @param array       $options
      *
      * @return array|bool|\stdClass
      */
-    public function get($uri, $payload = [], $options = [])
+    public function get($uri = null, $payload = [], $options = [])
     {
         return $this->call($uri, $payload, $options, Request::METHOD_GET);
     }
@@ -156,22 +164,21 @@ class InstanceApiClientService extends BaseService
      * @param array  $payload Any payload to send with request
      * @param array  $options Any options to pass to transport layer
      * @param string $method  The HTTP method. Defaults to "POST"
+     * @param bool   $object  If true, response is returned as an object, otherwise an array
      *
      * @return array|bool|\stdClass
      */
-    public function call($uri, $payload = [], $options = [], $method = Request::METHOD_POST)
+    public function call($uri, $payload = [], $options = [], $method = Request::METHOD_POST, $object = false)
     {
-        $options['headers'] = array_merge(array_get($options, 'headers', []),
-            [
-                EnterpriseDefaults::CONSOLE_X_HEADER => $this->token,
-            ]);
-
-        return $this->guzzleAny(
-            Uri::segment([$this->instance->getProvisionedEndpoint(), $this->resourceUri, $uri], false),
+        $_response = $this->guzzleAny(
+            Uri::segment([$this->resourceUri, $uri]),
             $payload,
             $options,
-            $method
+            $method,
+            $object
         );
+
+        return $_response;
     }
 
     /**
