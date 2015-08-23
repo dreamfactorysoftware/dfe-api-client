@@ -41,7 +41,7 @@
   "require":           {
     "dreamfactory/dfe-common":   "dev-develop as dev-master",
     "dreamfactory/dfe-database": "dev-develop as dev-master",
-    "guzzlehttp/guzzle":         "~4.0"
+    "guzzlehttp/guzzle":         "~6.0"
   },
   "require-dev":       {
     "doctrine/dbal":   "~2.3",
