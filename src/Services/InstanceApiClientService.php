@@ -2,19 +2,13 @@
 
 use DreamFactory\Enterprise\Common\Enums\EnterpriseDefaults;
 use DreamFactory\Enterprise\Common\Services\BaseService;
-use DreamFactory\Enterprise\Common\Traits\Guzzler;
 use DreamFactory\Enterprise\Database\Models\Instance;
+use DreamFactory\Library\Utility\Curl;
 use DreamFactory\Library\Utility\Uri;
 use Illuminate\Http\Request;
 
 class InstanceApiClientService extends BaseService
 {
-    //******************************************************************************
-    //* Traits
-    //******************************************************************************
-
-    use Guzzler;
-
     //******************************************************************************
     //* Members
     //******************************************************************************
@@ -48,27 +42,20 @@ class InstanceApiClientService extends BaseService
     {
         $this->instance = $instance;
         $this->token = $this->generateToken($instance->cluster->cluster_id_text, $instance->instance_id_text);
-        $this->resourceUri = $instance->getResourceUri();
+        $this->resourceUri = Uri::segment([$instance->getProvisionedEndpoint(), $instance->getResourceUri()], false);
 
-        $config = array_merge($config,
-            [
-                'headers' => [
-                    EnterpriseDefaults::CONSOLE_X_HEADER => $this->token,
-                ],
-            ]);
-
-        return $this->createClient($instance->getProvisionedEndpoint(), $config);
+        return $this;
     }
 
     /**
      * Returns a list of available resources
      *
-     * @return array|bool|\stdClass
+     * @return array
      */
     public function resources()
     {
         //  Return all system resources
-        return $this->get();
+        return (array)$this->get()->resource;
     }
 
     /**
@@ -81,7 +68,7 @@ class InstanceApiClientService extends BaseService
      */
     public function resource($resource, $id = null)
     {
-        return $this->get(Uri::segment([$resource, $id], true));
+        return (array)$this->get(Uri::segment([$resource, $id], true))->resource;
     }
 
     /**
@@ -170,13 +157,14 @@ class InstanceApiClientService extends BaseService
      */
     public function call($uri, $payload = [], $options = [], $method = Request::METHOD_POST, $object = false)
     {
-        $_response = $this->guzzleAny(
-            Uri::segment([$this->resourceUri, $uri]),
-            $payload,
-            $options,
-            $method,
-            $object
-        );
+        $options[CURLOPT_HTTPHEADER] = array_merge(array_get($options, CURLOPT_HTTPHEADER, []),
+            [EnterpriseDefaults::CONSOLE_X_HEADER . ': ' . $this->token]);
+
+        try {
+            $_response = Curl::request($method, Uri::segment([$this->resourceUri, $uri], false), $payload, $options);
+        } catch (\Exception $_ex) {
+            return false;
+        }
 
         return $_response;
     }
