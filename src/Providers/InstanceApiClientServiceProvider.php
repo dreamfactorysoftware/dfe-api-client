@@ -1,7 +1,7 @@
-<?php namespace DreamFactory\Enterprise\Client\Instance\Providers;
+<?php namespace DreamFactory\Enterprise\Instance\Ops\Providers;
 
-use DreamFactory\Enterprise\Client\Instance\Services\InstanceApiClientService;
 use DreamFactory\Enterprise\Common\Providers\BaseServiceProvider;
+use DreamFactory\Enterprise\Instance\Ops\Services\InstanceApiClientService;
 
 class InstanceApiClientServiceProvider extends BaseServiceProvider
 {

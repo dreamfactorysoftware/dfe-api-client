@@ -1,4 +1,4 @@
-<?php namespace DreamFactory\Enterprise\Client\Instance\Services;
+<?php namespace DreamFactory\Enterprise\Instance\Ops\Services;
 
 use DreamFactory\Enterprise\Common\Enums\EnterpriseDefaults;
 use DreamFactory\Enterprise\Common\Services\BaseService;
@@ -161,15 +161,9 @@ class InstanceApiClientService extends BaseService
      */
     public function call($uri, $payload = [], $options = [], $method = Request::METHOD_POST)
     {
-        static $_token;
-
-        !$_token &&
-        $_token =
-            $this->generateToken([$this->instance->cluster->cluster_id_text, $this->instance->instance_id_text]);
-
         $options['headers'] = array_merge(array_get($options, 'headers', []),
             [
-                EnterpriseDefaults::CONSOLE_X_HEADER => $_token,
+                EnterpriseDefaults::CONSOLE_X_HEADER => $this->token,
             ]);
 
         return $this->guzzleAny(
