@@ -41,7 +41,7 @@ class InstanceApiClientService extends BaseService
     public function connect(Instance $instance, $config = [])
     {
         $this->instance = $instance;
-        $this->token = $this->generateToken($instance->cluster->cluster_id_text, $instance->instance_id_text);
+        $this->token = $this->generateToken([$instance->cluster->cluster_id_text, $instance->instance_id_text]);
         $this->resourceUri = Uri::segment([$instance->getProvisionedEndpoint(), $instance->getResourceUri()], false);
 
         return $this;
@@ -68,6 +68,12 @@ class InstanceApiClientService extends BaseService
      */
     public function resource($resource, $id = null)
     {
+        if (false !== ($_response = $this->get(Uri::segment([$resource, $id], true)))) {
+            if (isset($_response->resource)) {
+                return $_response->resource;
+            }
+        }
+
         return (array)$this->get(Uri::segment([$resource, $id], true))->resource;
     }
 
@@ -172,13 +178,12 @@ class InstanceApiClientService extends BaseService
     /**
      * Creates token to talk to the instance
      *
-     * @param mixed      $parts         One or more keys/strings to be concatenated to make the hash string
-     * @param mixed|null $moreParts     Another keys/string to be concatenated to make the hash string
-     * @param mixed|null $evenMoreParts Another keys/string to be concatenated to make the hash string
+     * @param mixed       $parts     One or more keys/strings to be concatenated to make the hash string
+     * @param string|null $separator The string to delimit the parts
      *
      * @return string
      */
-    protected function generateToken($parts = [], $moreParts = null, $evenMoreParts = null)
+    protected function generateToken($parts = [], $separator = null)
     {
         $parts = is_array($parts) ? $parts : $parts = func_get_args();
 
