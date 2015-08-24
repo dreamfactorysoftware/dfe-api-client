@@ -34,11 +34,10 @@ class InstanceApiClientService extends BaseService
      * Initialize and set up the transport layer
      *
      * @param \DreamFactory\Enterprise\Database\Models\Instance $instance
-     * @param array                                             $config Any GuzzleHttp options
      *
      * @return $this
      */
-    public function connect(Instance $instance, $config = [])
+    public function connect(Instance $instance)
     {
         $this->instance = $instance;
         $this->token = $this->generateToken([$instance->cluster->cluster_id_text, $instance->instance_id_text]);
@@ -157,11 +156,10 @@ class InstanceApiClientService extends BaseService
      * @param array  $payload Any payload to send with request
      * @param array  $options Any options to pass to transport layer
      * @param string $method  The HTTP method. Defaults to "POST"
-     * @param bool   $object  If true, response is returned as an object, otherwise an array
      *
      * @return array|bool|\stdClass
      */
-    public function call($uri, $payload = [], $options = [], $method = Request::METHOD_POST, $object = false)
+    public function call($uri, $payload = [], $options = [], $method = Request::METHOD_POST)
     {
         $options[CURLOPT_HTTPHEADER] = array_merge(array_get($options, CURLOPT_HTTPHEADER, []),
             [EnterpriseDefaults::CONSOLE_X_HEADER . ': ' . $this->token]);

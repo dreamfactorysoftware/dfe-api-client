@@ -1,6 +1,6 @@
 <?php namespace DreamFactory\Enterprise\Instance\Ops\Facades;
 
-use DreamFactory\Enterprise\Client\Instance\Providers\InstanceApiClientServiceProvider;
+use DreamFactory\Enterprise\Instance\Ops\Providers\InstanceApiClientServiceProvider;
 use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Facade;
 
