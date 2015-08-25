@@ -33,7 +33,7 @@ class InstanceApiClientService extends BaseService
     /**
      * Initialize and set up the transport layer
      *
-     * @param \DreamFactory\Enterprise\Database\Models\Instance $instance
+     * @param Instance $instance
      *
      * @return $this
      */
@@ -152,7 +152,8 @@ class InstanceApiClientService extends BaseService
     /**
      * Makes a shout out to an instance's private back-end. Should be called bootyCall()  ;)
      *
-     * @param string $uri     The REST uri (i.e. "/[rest|api][/v[1|2]]/db", "/rest/system/users", etc.) to retrieve from the instance
+     * @param string $uri     The REST uri (i.e. "/[rest|api][/v[1|2]]/db", "/rest/system/users", etc.) to retrieve
+     *                        from the instance
      * @param array  $payload Any payload to send with request
      * @param array  $options Any options to pass to transport layer
      * @param string $method  The HTTP method. Defaults to "POST"
@@ -161,8 +162,9 @@ class InstanceApiClientService extends BaseService
      */
     public function call($uri, $payload = [], $options = [], $method = Request::METHOD_POST)
     {
-        $options[CURLOPT_HTTPHEADER] = array_merge(array_get($options, CURLOPT_HTTPHEADER, []),
-            [EnterpriseDefaults::CONSOLE_X_HEADER . ': ' . $this->token]);
+        $options[CURLOPT_HTTPHEADER] =
+            array_merge(array_get($options, CURLOPT_HTTPHEADER, []),
+                [EnterpriseDefaults::CONSOLE_X_HEADER . ': ' . $this->token]);
 
         try {
             $_response = Curl::request($method, Uri::segment([$this->resourceUri, $uri], false), $payload, $options);
@@ -185,7 +187,6 @@ class InstanceApiClientService extends BaseService
     {
         $parts = is_array($parts) ? $parts : $parts = func_get_args();
 
-        return hash(config('dfe.signature-method', EnterpriseDefaults::DEFAULT_SIGNATURE_METHOD),
-            implode('', $parts));
+        return hash(config('dfe.signature-method', EnterpriseDefaults::DEFAULT_SIGNATURE_METHOD), implode('', $parts));
     }
 }

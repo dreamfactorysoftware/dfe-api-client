@@ -44,6 +44,7 @@
   },
   "require-dev":       {
     "laravel/framework": "~5.1.0",
+    "guzzlehttp/guzzle": "~4.0",
     "phpspec/phpspec":   "~2.1",
     "phpunit/phpunit":   "~4.0"
   },
@@ -57,7 +58,7 @@
   },
   "extra":             {
     "branch-alias": {
-      "dev-develop": "1.x-dev"
+      "dev-develop": "1.0.x-dev"
     }
   }
 }
