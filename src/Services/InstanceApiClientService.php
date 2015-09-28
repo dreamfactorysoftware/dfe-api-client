@@ -53,8 +53,14 @@ class InstanceApiClientService extends BaseService
      */
     public function resources()
     {
-        //  Return all system resources
-        return (array)$this->get()->resource;
+        try {
+            //  ReturnGra all system resources
+            return (array)$this->get()->resource;
+        } catch (\Exception $_ex) {
+            $this->error('Exception retrieving resources from instance: ' . $_ex->getMessage());
+
+            return [];
+        }
     }
 
     /**
@@ -162,9 +168,8 @@ class InstanceApiClientService extends BaseService
      */
     public function call($uri, $payload = [], $options = [], $method = Request::METHOD_POST)
     {
-        $options[CURLOPT_HTTPHEADER] =
-            array_merge(array_get($options, CURLOPT_HTTPHEADER, []),
-                [EnterpriseDefaults::CONSOLE_X_HEADER . ': ' . $this->token]);
+        $options[CURLOPT_HTTPHEADER] = array_merge(array_get($options, CURLOPT_HTTPHEADER, []),
+            [EnterpriseDefaults::CONSOLE_X_HEADER . ': ' . $this->token]);
 
         try {
             $_response = Curl::request($method, Uri::segment([$this->resourceUri, $uri], false), $payload, $options);
