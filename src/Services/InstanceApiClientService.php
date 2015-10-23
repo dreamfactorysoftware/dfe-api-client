@@ -54,10 +54,11 @@ class InstanceApiClientService extends BaseService
     public function resources()
     {
         try {
-            //  ReturnGra all system resources
+            //  Return all system resources
             return (array)$this->get()->resource;
         } catch (\Exception $_ex) {
-            $this->error('Exception retrieving resources from instance: ' . $_ex->getMessage());
+            $this->error('Unable to retrieve resources from instance "' . $this->instance->instance_id_text . '"');
+            $this->debug('* GET resources() exception: ' . $_ex->getMessage());
 
             return [];
         }
