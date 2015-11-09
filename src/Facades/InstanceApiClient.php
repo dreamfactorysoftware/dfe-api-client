@@ -9,14 +9,14 @@ use Illuminate\Support\Facades\Facade;
 /**
  * @method static InstanceApiClientService connect(Instance $instance)
  * @method static array resources()
- * @method static array resource($resource, $id = null)
- * @method static array|boolean get($uri, $payload = [], array $options = [])
- * @method static array|boolean post($uri, $payload = [], array $options = [])
- * @method static array|boolean put($uri, $payload = [], array $options = [])
- * @method static array|boolean delete($uri, $payload = [], array $options = [])
- * @method static array|boolean patch($uri, $payload = [], array $options = [])
- * @method static array|boolean any($method, $uri, $payload = [], array $options = [])
- * @method static array|null|\stdClass call($uri, array $payload = [], array $options = [], $method = Request::METHOD_POST)
+ * @method static array|bool|\stdClass resource($resource, $id = null)
+ * @method static array|bool|\stdClass get($uri, $payload = [], array $options = [])
+ * @method static array|bool|\stdClass post($uri, $payload = [], array $options = [])
+ * @method static array|bool|\stdClass put($uri, $payload = [], array $options = [])
+ * @method static array|bool|\stdClass delete($uri, $payload = [], array $options = [])
+ * @method static array|bool|\stdClass patch($uri, $payload = [], array $options = [])
+ * @method static array|bool|\stdClass any($method, $uri, $payload = [], array $options = [])
+ * @method static array|null|bool|\stdClass call($uri, array $payload = [], array $options = [], $method = Request::METHOD_POST)
  */
 class InstanceApiClient extends Facade
 {
