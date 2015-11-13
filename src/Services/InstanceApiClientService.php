@@ -55,10 +55,14 @@ class InstanceApiClientService extends BaseService
     {
         try {
             //  Return all system resources
-            return (array)$this->get()->resource;
+            $_response = (array)$this->get();
+
+            return array_get($_response, 'resource', false);
         } catch (\Exception $_ex) {
-            $this->error('Unable to retrieve resources from instance "' . $this->instance->instance_id_text . '"');
-            $this->debug('* GET resources() exception: ' . $_ex->getMessage());
+            $this->error('[dfe.instance-api-client] resources() call failure from instance "' .
+                $this->instance->instance_id_text .
+                '"',
+                Curl::getInfo());
 
             return [];
         }
@@ -74,13 +78,18 @@ class InstanceApiClientService extends BaseService
      */
     public function resource($resource, $id = null)
     {
-        if (false !== ($_response = $this->get(Uri::segment([$resource, $id], true)))) {
-            if (isset($_response->resource)) {
-                return $_response->resource;
-            }
-        }
+        try {
+            $_response = (array)$this->get(Uri::segment([$resource, $id], true));
 
-        return (array)$this->get(Uri::segment([$resource, $id], true))->resource;
+            return array_get($_response, 'resource', false);
+        } catch (\Exception $_ex) {
+            $this->error('[dfe.instance-api-client] resource() call failure from instance "' .
+                $this->instance->instance_id_text .
+                '": ' . $_ex->getMessage(),
+                Curl::getInfo());
+
+            return [];
+        }
     }
 
     /**
