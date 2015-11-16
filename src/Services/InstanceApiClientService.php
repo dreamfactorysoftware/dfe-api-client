@@ -4,6 +4,7 @@ use DreamFactory\Enterprise\Common\Enums\EnterpriseDefaults;
 use DreamFactory\Enterprise\Common\Services\BaseService;
 use DreamFactory\Enterprise\Database\Models\Instance;
 use DreamFactory\Library\Utility\Curl;
+use DreamFactory\Library\Utility\Json;
 use DreamFactory\Library\Utility\Uri;
 use Illuminate\Http\Request;
 
@@ -59,10 +60,12 @@ class InstanceApiClientService extends BaseService
 
             return array_get($_response, 'resource', false);
         } catch (\Exception $_ex) {
-            $this->error('[dfe.instance-api-client] resources() call failure from instance "' .
+            $this->error(
+                '[dfe.instance-api-client] resources() call failure from instance "' .
                 $this->instance->instance_id_text .
                 '"',
-                Curl::getInfo());
+                Curl::getInfo()
+            );
 
             return [];
         }
@@ -83,10 +86,12 @@ class InstanceApiClientService extends BaseService
 
             return array_get($_response, 'resource', false);
         } catch (\Exception $_ex) {
-            $this->error('[dfe.instance-api-client] resource() call failure from instance "' .
+            $this->error(
+                '[dfe.instance-api-client] resource() call failure from instance "' .
                 $this->instance->instance_id_text .
                 '": ' . $_ex->getMessage(),
-                Curl::getInfo());
+                Curl::getInfo()
+            );
 
             return [];
         }
@@ -178,8 +183,19 @@ class InstanceApiClientService extends BaseService
      */
     public function call($uri, $payload = [], $options = [], $method = Request::METHOD_POST)
     {
-        $options[CURLOPT_HTTPHEADER] = array_merge(array_get($options, CURLOPT_HTTPHEADER, []),
-            [EnterpriseDefaults::CONSOLE_X_HEADER . ': ' . $this->token]);
+        $options[CURLOPT_HTTPHEADER] = array_merge(
+            array_get($options, CURLOPT_HTTPHEADER, []),
+            [EnterpriseDefaults::CONSOLE_X_HEADER . ': ' . $this->token]
+        );
+
+        if (!empty($payload) && is_array($payload)) {
+            $payload = Json::encode($payload);
+
+            $options[CURLOPT_HTTPHEADER] = array_merge(
+                array_get($options, CURLOPT_HTTPHEADER, []),
+                ['Content-Type: application/json']
+            );
+        }
 
         try {
             $_response = Curl::request($method, Uri::segment([$this->resourceUri, $uri], false), $payload, $options);
