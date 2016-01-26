@@ -3,6 +3,11 @@
 use DreamFactory\Enterprise\Common\Providers\BaseServiceProvider;
 use DreamFactory\Enterprise\Instance\Ops\Services\InstanceApiClientService;
 
+/**
+ * InstanceApiClientServiceProvider
+ *
+ * @package DreamFactory\Enterprise\Instance\Ops\Providers
+ */
 class InstanceApiClientServiceProvider extends BaseServiceProvider
 {
     //******************************************************************************
@@ -24,7 +29,7 @@ class InstanceApiClientServiceProvider extends BaseServiceProvider
     public function register()
     {
         $this->singleton(static::IOC_NAME,
-            function ($app){
+            function ($app) {
                 return new InstanceApiClientService($app);
             });
     }
