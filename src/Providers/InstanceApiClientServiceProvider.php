@@ -29,7 +29,7 @@ class InstanceApiClientServiceProvider extends BaseServiceProvider
     public function register()
     {
         $this->singleton(static::IOC_NAME,
-            function($app) {
+            function ($app) {
                 return new InstanceApiClientService($app);
             });
     }

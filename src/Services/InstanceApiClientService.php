@@ -71,12 +71,7 @@ class InstanceApiClientService extends BaseService
 
             return array_get($_response, 'resource', false);
         } catch (\Exception $_ex) {
-            $this->error(
-                '[dfe.instance-api-client] resources() call failure from instance "' .
-                $this->instance->instance_id_text .
-                '"',
-                Curl::getInfo()
-            );
+            $this->error('[dfe.instance-api-client] resources() call failure from instance "' . $this->instance->instance_id_text . '"', Curl::getInfo());
 
             return [];
         }
@@ -97,12 +92,8 @@ class InstanceApiClientService extends BaseService
 
             return array_get($_response, 'resource', false);
         } catch (\Exception $_ex) {
-            $this->error(
-                '[dfe.instance-api-client] resource() call failure from instance "' .
-                $this->instance->instance_id_text .
-                '": ' . $_ex->getMessage(),
-                Curl::getInfo()
-            );
+            $this->error('[dfe.instance-api-client] resource() call failure from instance "' . $this->instance->instance_id_text . '": ' . $_ex->getMessage(),
+                Curl::getInfo());
 
             return [];
         }
