@@ -88,7 +88,7 @@ class InstanceApiClientService extends BaseService
                         Deactivation::create([
                             'user_id'          => $this->instance->user_id,
                             'instance_id'      => $this->instance->id,
-                            'activate_by_date' => date('Y-m-d H:i:s', time() + (DateTimeIntervals::SECONDS_PER_DAY * 3)),
+                            'activate_by_date' => date('Y-m-d H:i:s', time() + DateTimeIntervals::SECONDS_PER_DAY),
                         ]);
                     } catch (\Exception $_ex) {
                         //  Ignore dupes
@@ -100,11 +100,17 @@ class InstanceApiClientService extends BaseService
                     //  Bogosity gets false
                     $_env = false;
                 } else {
-                    $this->instance->where('activate_ind', 0)->update([
+                    if ($this->instance->where('activate_ind', 0)->update([
                         'last_state_date'    => Carbon::now(),
                         'activate_ind'       => 1,
                         'platform_state_nbr' => OperationalStates::ACTIVATED,
-                    ]);
+                    ])
+                    ) {
+                        //  Remove deactivation row cuz we's activated!
+                        if (null !== ($_model = Deactivation::where(['instance_id' => $this->instance->id, 'user_id' => $this->instance->user_id])->first())) {
+                            $_model->delete();
+                        }
+                    }
                 }
             }
 
