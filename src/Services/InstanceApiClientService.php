@@ -1,9 +1,13 @@
 <?php namespace DreamFactory\Enterprise\Instance\Ops\Services;
 
+use Carbon\Carbon;
 use DreamFactory\Enterprise\Common\Enums\EnterpriseDefaults;
+use DreamFactory\Enterprise\Common\Enums\OperationalStates;
 use DreamFactory\Enterprise\Common\Services\BaseService;
+use DreamFactory\Enterprise\Database\Models\Deactivation;
 use DreamFactory\Enterprise\Database\Models\Instance;
 use DreamFactory\Library\Utility\Curl;
+use DreamFactory\Library\Utility\Enums\DateTimeIntervals;
 use DreamFactory\Library\Utility\Json;
 use DreamFactory\Library\Utility\Uri;
 use Illuminate\Http\Request;
@@ -56,6 +60,74 @@ class InstanceApiClientService extends BaseService
         $this->headers = [$header ?: EnterpriseDefaults::CONSOLE_X_HEADER . ': ' . $this->token,];
 
         return $this;
+    }
+
+    /**
+     * Queries an instance to determine it's status
+     *
+     * @param bool $update If true, the instance's state is noted
+     *
+     * @return array|bool
+     */
+    public function status($update = true)
+    {
+        try {
+            $_env = $this->environment();
+
+            if ($update) {
+                if (empty($_env)) {
+                    //  Instance not activated...
+                    $this->instance->where('last_state_date', '0000-00-00 00:00:00')->update([
+                        'last_state_date' => Carbon::now(),
+                        'activate_ind'    => 0,
+                        'ready_state_nbr' => OperationalStates::NOT_ACTIVATED,
+                    ]);
+
+                    //  Register for deactivation if not already...
+                    try {
+                        Deactivation::create([
+                            'user_id'          => $this->instance->user_id,
+                            'instance_id'      => $this->instance->id,
+                            'activate_by_date' => date('Y-m-d H:i:s', time() + (DateTimeIntervals::SECONDS_PER_DAY * 3)),
+                        ]);
+                    } catch (\Exception $_ex) {
+                        //  Ignore dupes
+                        if (false !== stripos($_ex->getMessage(), '1062')) {
+                            $this->error('[dfe.instance-api-client] exception saving deactivation row: ' . $_ex->getMessage());
+                        }
+                    }
+
+                    //  Bogosity gets false
+                    $_env = false;
+                } else {
+                    $this->instance->where('activate_ind', 0)->update([
+                        'last_state_date'    => Carbon::now(),
+                        'activate_ind'       => 1,
+                        'platform_state_nbr' => OperationalStates::ACTIVATED,
+                    ]);
+                }
+            }
+
+            return $_env;
+        } catch (\Exception $_ex) {
+            $this->error('[dfe.instance-api-client] exception getting instance status: ' . $_ex->getMessage());
+        }
+
+        return false;
+    }
+
+    /**
+     * Retrieves an instance's environment
+     */
+    public function environment()
+    {
+        try {
+            return (array)$this->get('environment');
+        } catch (\Exception $_ex) {
+            $this->error('[dfe.instance-api-client] environment() call failure from instance "' . $this->instance->instance_id_text . '"', Curl::getInfo());
+
+            return [];
+        }
     }
 
     /**
