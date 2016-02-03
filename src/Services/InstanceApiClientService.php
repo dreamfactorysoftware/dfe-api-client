@@ -1,13 +1,9 @@
 <?php namespace DreamFactory\Enterprise\Instance\Ops\Services;
 
-use Carbon\Carbon;
 use DreamFactory\Enterprise\Common\Enums\EnterpriseDefaults;
-use DreamFactory\Enterprise\Common\Enums\OperationalStates;
 use DreamFactory\Enterprise\Common\Services\BaseService;
-use DreamFactory\Enterprise\Database\Models\Deactivation;
 use DreamFactory\Enterprise\Database\Models\Instance;
 use DreamFactory\Library\Utility\Curl;
-use DreamFactory\Library\Utility\Enums\DateTimeIntervals;
 use DreamFactory\Library\Utility\Json;
 use DreamFactory\Library\Utility\Uri;
 use Illuminate\Http\Request;
@@ -75,43 +71,9 @@ class InstanceApiClientService extends BaseService
             $_env = $this->environment();
 
             if ($update) {
-                if (empty($_env)) {
-                    //  Instance not activated...
-                    $this->instance->where('last_state_date', '0000-00-00 00:00:00')->update([
-                        'last_state_date' => Carbon::now(),
-                        'activate_ind'    => 0,
-                        'ready_state_nbr' => OperationalStates::NOT_ACTIVATED,
-                    ]);
-
-                    //  Register for deactivation if not already...
-                    try {
-                        Deactivation::create([
-                            'user_id'          => $this->instance->user_id,
-                            'instance_id'      => $this->instance->id,
-                            'activate_by_date' => date('Y-m-d H:i:s', time() + DateTimeIntervals::SECONDS_PER_DAY),
-                        ]);
-                    } catch (\Exception $_ex) {
-                        //  Ignore dupes
-                        if (false !== stripos($_ex->getMessage(), '1062')) {
-                            $this->error('[dfe.instance-api-client] exception saving deactivation row: ' . $_ex->getMessage());
-                        }
-                    }
-
-                    //  Bogosity gets false
-                    $_env = false;
-                } else {
-                    if ($this->instance->where('activate_ind', 0)->update([
-                        'last_state_date'    => Carbon::now(),
-                        'activate_ind'       => 1,
-                        'platform_state_nbr' => OperationalStates::ACTIVATED,
-                    ])
-                    ) {
-                        //  Remove deactivation row cuz we's activated!
-                        if (null !== ($_model = Deactivation::where(['instance_id' => $this->instance->id, 'user_id' => $this->instance->user_id])->first())) {
-                            $_model->delete();
-                        }
-                    }
-                }
+                $this->instance->updateInstanceState(!empty($_env));
+                //  Bogosity gets false
+                empty($_env) && $_env = false;
             }
 
             return $_env;
