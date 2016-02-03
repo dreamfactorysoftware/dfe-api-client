@@ -2,6 +2,7 @@
 
 use DreamFactory\Enterprise\Common\Enums\EnterpriseDefaults;
 use DreamFactory\Enterprise\Common\Services\BaseService;
+use DreamFactory\Enterprise\Database\Exceptions\InstanceNotActivatedException;
 use DreamFactory\Enterprise\Database\Models\Instance;
 use DreamFactory\Library\Utility\Curl;
 use DreamFactory\Library\Utility\Json;
@@ -91,7 +92,13 @@ class InstanceApiClientService extends BaseService
     public function environment()
     {
         try {
-            return (array)$this->get('environment');
+            $_env = (array)$this->get('environment');
+
+            if (is_array($_env) && array_get($_env, 'platform')) {
+                return $_env;
+            }
+
+            throw new InstanceNotActivatedException($this->instance->instance_id_text);
         } catch (\Exception $_ex) {
             $this->error('[dfe.instance-api-client] environment() call failure from instance "' . $this->instance->instance_id_text . '"', Curl::getInfo());
 
