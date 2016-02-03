@@ -94,13 +94,16 @@ class InstanceApiClientService extends BaseService
         try {
             $_env = (array)$this->get('environment');
 
-            if (is_array($_env) && array_get($_env, 'platform')) {
+            if (!empty($_env) & is_array($_env) && null !== array_get($_env, 'platform')) {
                 return $_env;
             }
 
             throw new InstanceNotActivatedException($this->instance->instance_id_text);
         } catch (\Exception $_ex) {
-            $this->error('[dfe.instance-api-client] environment() call failure from instance "' . $this->instance->instance_id_text . '"', Curl::getInfo());
+            //  If we get HTML back, the instance isn't activated. Otherwise dunno
+            if ('text/html' != array_get(Curl::getInfo(), 'content_type')) {
+                $this->error('[dfe.instance-api-client] environment() call failure from instance "' . $this->instance->instance_id_text . '"', Curl::getInfo());
+            }
 
             return [];
         }
