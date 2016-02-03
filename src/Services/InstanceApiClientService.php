@@ -101,7 +101,7 @@ class InstanceApiClientService extends BaseService
             throw new InstanceNotActivatedException($this->instance->instance_id_text);
         } catch (\Exception $_ex) {
             //  If we get HTML back, the instance isn't activated. Otherwise dunno
-            if (false !== stripos(array_get($_info = Curl::getInfo(), 'content_type'), 'text/html')) {
+            if (false === stripos(array_get($_info = Curl::getInfo(), 'content_type'), 'text/html')) {
                 $this->error('[dfe.instance-api-client] environment() call failure from instance "' . $this->instance->instance_id_text . '"', $_info);
             }
 
