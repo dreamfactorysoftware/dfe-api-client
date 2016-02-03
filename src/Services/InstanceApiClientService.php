@@ -72,9 +72,7 @@ class InstanceApiClientService extends BaseService
             $_env = $this->environment();
 
             if ($update) {
-                \Log::debug('Environment ', $_env);
-
-                $this->instance->updateInstanceState(!empty($_env));
+                $this->instance->updateInstanceState(is_array($_env) && sizeof($_env) > 1);
                 //  Bogosity gets false
                 empty($_env) && $_env = false;
             }
