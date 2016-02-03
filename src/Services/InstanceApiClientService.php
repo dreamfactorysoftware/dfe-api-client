@@ -7,6 +7,7 @@ use DreamFactory\Library\Utility\Curl;
 use DreamFactory\Library\Utility\Json;
 use DreamFactory\Library\Utility\Uri;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 
 class InstanceApiClientService extends BaseService
 {
@@ -127,16 +128,21 @@ class InstanceApiClientService extends BaseService
      */
     public function resource($resource, $id = null)
     {
+        $_last = null;
+
         try {
             $_response = (array)$this->get(Uri::segment([$resource, $id]));
 
-            return array_get($_response, 'resource', false);
+            if (Response::HTTP_OK == ($_last = Curl::getLastHttpCode())) {
+                return array_get($_response, 'resource', false);
+            }
         } catch (\Exception $_ex) {
-            $this->error('[dfe.instance-api-client] resource() call failure from instance "' . $this->instance->instance_id_text . '": ' . $_ex->getMessage(),
-                Curl::getInfo());
-
-            return [];
+            $_last = $_ex->getMessage();
         }
+
+        $this->error('[dfe.instance-api-client] resource() call failure from instance "' . $this->instance->instance_id_text . '": ' . $_last, Curl::getInfo());
+
+        return [];
     }
 
     /**
