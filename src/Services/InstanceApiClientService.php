@@ -73,7 +73,7 @@ class InstanceApiClientService extends BaseService
             $_env = $this->environment();
 
             if ($update) {
-                $this->instance->updateInstanceState(is_array($_env) && sizeof($_env) > 1);
+                $this->instance->updateInstanceState(is_array($_env) && null !== array_get($_env, 'platform'));
                 //  Bogosity gets false
                 empty($_env) && $_env = false;
             }
@@ -88,6 +88,8 @@ class InstanceApiClientService extends BaseService
 
     /**
      * Retrieves an instance's environment
+     *
+     * @return array|bool
      */
     public function environment()
     {
@@ -105,7 +107,7 @@ class InstanceApiClientService extends BaseService
                 $this->error('[dfe.instance-api-client] environment() call failure from instance "' . $this->instance->instance_id_text . '"', $_info);
             }
 
-            return [];
+            return false;
         }
     }
 
