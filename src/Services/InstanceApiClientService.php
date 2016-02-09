@@ -1,7 +1,9 @@
 <?php namespace DreamFactory\Enterprise\Instance\Ops\Services;
 
 use DreamFactory\Enterprise\Common\Enums\EnterpriseDefaults;
+use DreamFactory\Enterprise\Common\Enums\InstanceStates;
 use DreamFactory\Enterprise\Common\Services\BaseService;
+use DreamFactory\Enterprise\Database\Enums\DeactivationReasons;
 use DreamFactory\Enterprise\Database\Exceptions\InstanceNotActivatedException;
 use DreamFactory\Enterprise\Database\Models\Instance;
 use DreamFactory\Library\Utility\Curl;
@@ -61,32 +63,6 @@ class InstanceApiClientService extends BaseService
     }
 
     /**
-     * Queries an instance to determine it's status
-     *
-     * @param bool $update If true, the instance's state is noted
-     *
-     * @return array|bool
-     */
-    public function status($update = true)
-    {
-        try {
-            $_env = $this->environment();
-
-            if ($update) {
-                $this->instance->updateInstanceState(is_array($_env) && null !== array_get($_env, 'platform'));
-                //  Bogosity gets false
-                empty($_env) && $_env = false;
-            }
-
-            return $_env;
-        } catch (\Exception $_ex) {
-            $this->error('[dfe.instance-api-client] exception getting instance status: ' . $_ex->getMessage());
-        }
-
-        return false;
-    }
-
-    /**
      * Retrieves an instance's environment
      *
      * @return array|bool
@@ -96,19 +72,54 @@ class InstanceApiClientService extends BaseService
         try {
             $_env = (array)$this->get('environment');
 
-            if (!empty($_env) & is_array($_env) && null !== array_get($_env, 'platform')) {
+            if (Response::HTTP_OK == Curl::getLastHttpCode() && null !== data_get($_env, 'platform')) {
                 return $_env;
             }
-
-            throw new InstanceNotActivatedException($this->instance->instance_id_text);
         } catch (\Exception $_ex) {
-            //  If we get HTML back, the instance isn't activated. Otherwise dunno
-            if (false === stripos(array_get($_info = Curl::getInfo(), 'content_type'), 'text/html')) {
-                $this->error('[dfe.instance-api-client] environment() call failure from instance "' . $this->instance->instance_id_text . '"', $_info);
-            }
-
-            return false;
         }
+
+        //  If we get here, must not be an active instance
+        $this->error('[dfe.instance-api-client] environment() call failure from instance "' . $this->instance->instance_id_text . '"', Curl::getInfo());
+
+        return false;
+    }
+
+    /**
+     * Queries an instance to determine it's status and "ready" state
+     *
+     * @param bool $sync If true, the instance's state is noted
+     *
+     * @return array|bool
+     */
+    public function determineInstanceState($sync = true)
+    {
+        $_readyState = (0 === $this->instance->ready_state_nbr) ? InstanceStates::INIT_REQUIRED : $this->instance->ready_state_nbr;
+
+        //  Pull environment and try and determine ready state
+        $_env = $this->environment();
+
+        if (InstanceStates::READY != $_readyState && $_env) {
+            if (null !== data_get($_env, 'platform.version_current')) {
+                //  Assume admin is required
+                $_readyState = InstanceStates::ADMIN_REQUIRED;
+
+                try {
+                    //  Check if fully ready
+                    if (false !== ($_admin = $this->get('admin')) && count(data_get($_admin, 'resource')) > 0) {
+                        $_readyState = InstanceStates::READY;
+                    }
+                } catch (\Exception $_ex) {
+                    //  Nada
+                }
+            } else {
+                //@todo Should possibly consider this condition as NOT ACTIVATED
+                $_readyState = InstanceStates::SCHEMA_REQUIRED;
+            }
+        }
+
+        $sync && $this->instance->updateInstanceState($_env !== false, true, DeactivationReasons::INCOMPLETE_PROVISION, $_readyState);
+
+        return $_env;
     }
 
     /**

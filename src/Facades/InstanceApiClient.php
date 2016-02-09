@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Facade;
 /**
  * @method static InstanceApiClientService connect(Instance $instance, $token = null, $header = null)
  * @method static array resources()
+ * @method static array|bool determineInstanceState($sync = false)
+ * @method static array|bool|\stdClass environment()
  * @method static array|bool|\stdClass resource($resource, $id = null)
  * @method static array|bool|\stdClass get($uri, $payload = [], array $options = [])
  * @method static array|bool|\stdClass post($uri, $payload = [], array $options = [])
