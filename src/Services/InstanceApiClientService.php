@@ -113,7 +113,7 @@ class InstanceApiClientService extends BaseService
                 }
             } else {
                 //@todo Should possibly consider this condition as NOT ACTIVATED
-                $_readyState = InstanceStates::SCHEMA_REQUIRED;
+                $_readyState = InstanceStates::INIT_REQUIRED;
             }
         }
 
