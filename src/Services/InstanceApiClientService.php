@@ -93,19 +93,21 @@ class InstanceApiClientService extends BaseService
      */
     public function determineInstanceState($sync = true)
     {
-        $_readyState = (0 === $this->instance->ready_state_nbr) ? InstanceStates::INIT_REQUIRED : $this->instance->ready_state_nbr;
+        $_readyState = $this->instance->ready_state_nbr;
 
         //  Pull environment and try and determine ready state
-        $_env = $this->environment();
-
-        if (InstanceStates::READY != $_readyState && $_env) {
+        if (false === ($_env = $this->environment())) {
+            //  Not activated
+            $_readyState = InstanceStates::INIT_REQUIRED;
+        } else if (InstanceStates::READY != $_readyState) {
             if (null !== data_get($_env, 'platform.version_current')) {
-                //  Assume admin is required
+                //  Ok, activated, no assume admin is required
                 $_readyState = InstanceStates::ADMIN_REQUIRED;
 
                 try {
                     //  Check if fully ready
                     if (false !== ($_admin = $this->get('admin')) && count(data_get($_admin, 'resource')) > 0) {
+                        //  We're good!
                         $_readyState = InstanceStates::READY;
                     }
                 } catch (\Exception $_ex) {
@@ -114,6 +116,7 @@ class InstanceApiClientService extends BaseService
             } else {
                 //@todo Should possibly consider this condition as NOT ACTIVATED
                 $_readyState = InstanceStates::INIT_REQUIRED;
+                $_env = false;
             }
         }
 
