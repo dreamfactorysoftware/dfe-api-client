@@ -106,12 +106,13 @@ class InstanceApiClientService extends BaseService
 
                 try {
                     //  Check if fully ready
-                    if (false !== ($_admin = $this->get('admin')) && count(data_get($_admin, 'resource')) > 0) {
+                    if (false !== ($_admin = $this->resource('admin')) && count($_admin) > 0) {
                         //  We're good!
                         $_readyState = InstanceStates::READY;
                     }
                 } catch (\Exception $_ex) {
                     //  Nada
+                    $_env = false;
                 }
             } else {
                 //@todo Should possibly consider this condition as NOT ACTIVATED
