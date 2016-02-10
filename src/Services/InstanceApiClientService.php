@@ -1,8 +1,9 @@
 <?php namespace DreamFactory\Enterprise\Instance\Ops\Services;
 
 use DreamFactory\Enterprise\Common\Enums\EnterpriseDefaults;
+use DreamFactory\Enterprise\Common\Enums\InstanceStates;
 use DreamFactory\Enterprise\Common\Services\BaseService;
-use DreamFactory\Enterprise\Database\Exceptions\InstanceNotActivatedException;
+use DreamFactory\Enterprise\Database\Enums\DeactivationReasons;
 use DreamFactory\Enterprise\Database\Models\Instance;
 use DreamFactory\Library\Utility\Curl;
 use DreamFactory\Library\Utility\Json;
@@ -51,39 +52,13 @@ class InstanceApiClientService extends BaseService
         $this->instance = $instance;
 
         //  Note trailing slash added...
-        $this->resourceUri = rtrim(Uri::segment([$instance->getProvisionedEndpoint(), $instance->getResourceUri()], false), '/') . '/';
+        $this->resourceUri = rtrim(Uri::segment([$this->getProvisionedEndpoint(), $instance->getResourceUri()], false), '/') . '/';
 
         //  Set up the channel
         $this->token = $token ?: $this->generateToken([$instance->cluster->cluster_id_text, $instance->instance_id_text]);
         $this->headers = [$header ?: EnterpriseDefaults::CONSOLE_X_HEADER . ': ' . $this->token,];
 
         return $this;
-    }
-
-    /**
-     * Queries an instance to determine it's status
-     *
-     * @param bool $update If true, the instance's state is noted
-     *
-     * @return array|bool
-     */
-    public function status($update = true)
-    {
-        try {
-            $_env = $this->environment();
-
-            if ($update) {
-                $this->instance->updateInstanceState(is_array($_env) && null !== array_get($_env, 'platform'));
-                //  Bogosity gets false
-                empty($_env) && $_env = false;
-            }
-
-            return $_env;
-        } catch (\Exception $_ex) {
-            $this->error('[dfe.instance-api-client] exception getting instance status: ' . $_ex->getMessage());
-        }
-
-        return false;
     }
 
     /**
@@ -96,19 +71,63 @@ class InstanceApiClientService extends BaseService
         try {
             $_env = (array)$this->get('environment');
 
-            if (!empty($_env) & is_array($_env) && null !== array_get($_env, 'platform')) {
+            if (Response::HTTP_OK == Curl::getLastHttpCode() && null !== data_get($_env, 'platform')) {
                 return $_env;
             }
-
-            throw new InstanceNotActivatedException($this->instance->instance_id_text);
         } catch (\Exception $_ex) {
-            //  If we get HTML back, the instance isn't activated. Otherwise dunno
-            if (false === stripos(array_get($_info = Curl::getInfo(), 'content_type'), 'text/html')) {
-                $this->error('[dfe.instance-api-client] environment() call failure from instance "' . $this->instance->instance_id_text . '"', $_info);
-            }
-
-            return false;
         }
+
+        //  If we get here, must not be an active instance
+        $this->error('[dfe.instance-api-client] environment() call failure | instance "' . $this->instance->instance_id_text . '"');
+
+        return false;
+    }
+
+    /**
+     * Queries an instance to determine it's status and "ready" state
+     *
+     * @param bool $sync If true, the instance's state is noted
+     *
+     * @return array|bool
+     */
+    public function determineInstanceState($sync = true)
+    {
+        $_env = $this->environment();
+
+        if (InstanceStates::READY == $this->instance->ready_state_nbr) {
+            return $_env;
+        }
+
+        //  Assume not activated
+        $_readyState = InstanceStates::INIT_REQUIRED;
+
+        //  Pull environment and try and determine ready state
+        if (false !== $_env) {
+            if (null !== data_get($_env, 'platform.version_current')) {
+                try {
+                    //  Check if fully ready
+                    if (false === ($_admin = $this->resource('admin')) || 1 > count($_admin)) {
+                        $_readyState = InstanceStates::ADMIN_REQUIRED;
+                    } else {
+                        //  We're good!
+                        $_readyState = InstanceStates::READY;
+                    }
+                } catch (\Exception $_ex) {
+                    //  No bueno. Not activated
+                }
+            } else {
+                //@todo Should possibly consider this condition as NOT ACTIVATED
+                $_readyState = InstanceStates::INIT_REQUIRED;
+            }
+        }
+
+        if (InstanceStates::INIT_REQUIRED == $_readyState) {
+            $_env = false;
+        }
+
+        $sync && $this->instance->updateInstanceState($_env !== false, true, DeactivationReasons::INCOMPLETE_PROVISION, $_readyState);
+
+        return $_env;
     }
 
     /**
@@ -152,9 +171,18 @@ class InstanceApiClientService extends BaseService
             $_last = $_ex->getMessage();
         }
 
-        $this->error('[dfe.instance-api-client] resource() call failure from instance "' . $this->instance->instance_id_text . '": ' . $_last, Curl::getInfo());
+        $this->error('[dfe.instance-api-client] resource() call failure from instance "' . $this->instance->instance_id_text . '": ' . $_last,
+            Curl::getInfo());
 
         return [];
+    }
+
+    /**
+     * @return string
+     */
+    public function getProvisionedEndpoint()
+    {
+        return $this->instance->getProvisionedEndpoint();
     }
 
     /**
@@ -252,6 +280,12 @@ class InstanceApiClientService extends BaseService
 
         try {
             $_response = Curl::request($method, $this->resourceUri . ltrim($uri, ' /'), $payload, $options);
+
+            $_info = Curl::getInfo();
+
+            if (false === stripos($_info['content_type'], 'text/html') && Response::HTTP_OK != $_info['http_code']) {
+                $this->debug('[df.instance-api-client ' . $method . '] possible bad response: ' . print_r($_response, true));
+            }
         } catch (\Exception $_ex) {
             $this->error('[dfe.instance-api-client] ' . $method . ' failure: ' . $_ex->getMessage());
 
