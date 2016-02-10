@@ -4,7 +4,6 @@ use DreamFactory\Enterprise\Common\Enums\EnterpriseDefaults;
 use DreamFactory\Enterprise\Common\Enums\InstanceStates;
 use DreamFactory\Enterprise\Common\Services\BaseService;
 use DreamFactory\Enterprise\Database\Enums\DeactivationReasons;
-use DreamFactory\Enterprise\Database\Exceptions\InstanceNotActivatedException;
 use DreamFactory\Enterprise\Database\Models\Instance;
 use DreamFactory\Library\Utility\Curl;
 use DreamFactory\Library\Utility\Json;
