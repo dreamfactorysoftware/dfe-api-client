@@ -52,7 +52,7 @@ class InstanceApiClientService extends BaseService
         $this->instance = $instance;
 
         //  Note trailing slash added...
-        $this->resourceUri = rtrim(Uri::segment([$instance->getProvisionedEndpoint(), $instance->getResourceUri()], false), '/') . '/';
+        $this->resourceUri = rtrim(Uri::segment([$this->getProvisionedEndpoint(), $instance->getResourceUri()], false), '/') . '/';
 
         //  Set up the channel
         $this->token = $token ?: $this->generateToken([$instance->cluster->cluster_id_text, $instance->instance_id_text]);
@@ -78,7 +78,7 @@ class InstanceApiClientService extends BaseService
         }
 
         //  If we get here, must not be an active instance
-        $this->error('[dfe.instance-api-client] environment() call failure from instance "' . $this->instance->instance_id_text . '"', Curl::getInfo());
+        $this->error('[dfe.instance-api-client] environment() call failure | instance "' . $this->instance->instance_id_text . '"');
 
         return false;
     }
@@ -92,32 +92,37 @@ class InstanceApiClientService extends BaseService
      */
     public function determineInstanceState($sync = true)
     {
-        $_readyState = $this->instance->ready_state_nbr;
+        $_env = $this->environment();
+
+        if (InstanceStates::READY == $this->instance->ready_state_nbr) {
+            return $_env;
+        }
+
+        //  Assume not activated
+        $_readyState = InstanceStates::INIT_REQUIRED;
 
         //  Pull environment and try and determine ready state
-        if (false === ($_env = $this->environment())) {
-            //  Not activated
-            $_readyState = InstanceStates::INIT_REQUIRED;
-        } else if (InstanceStates::READY != $_readyState) {
+        if (false !== $_env) {
             if (null !== data_get($_env, 'platform.version_current')) {
-                //  Ok, activated, no assume admin is required
-                $_readyState = InstanceStates::ADMIN_REQUIRED;
-
                 try {
                     //  Check if fully ready
-                    if (false !== ($_admin = $this->resource('admin')) && count($_admin) > 0) {
+                    if (false === ($_admin = $this->resource('admin')) || 1 > count($_admin)) {
+                        $_readyState = InstanceStates::ADMIN_REQUIRED;
+                    } else {
                         //  We're good!
                         $_readyState = InstanceStates::READY;
                     }
                 } catch (\Exception $_ex) {
-                    //  Nada
-                    $_env = false;
+                    //  No bueno. Not activated
                 }
             } else {
                 //@todo Should possibly consider this condition as NOT ACTIVATED
                 $_readyState = InstanceStates::INIT_REQUIRED;
-                $_env = false;
             }
+        }
+
+        if (InstanceStates::INIT_REQUIRED == $_readyState) {
+            $_env = false;
         }
 
         $sync && $this->instance->updateInstanceState($_env !== false, true, DeactivationReasons::INCOMPLETE_PROVISION, $_readyState);
@@ -166,9 +171,18 @@ class InstanceApiClientService extends BaseService
             $_last = $_ex->getMessage();
         }
 
-        $this->error('[dfe.instance-api-client] resource() call failure from instance "' . $this->instance->instance_id_text . '": ' . $_last, Curl::getInfo());
+        $this->error('[dfe.instance-api-client] resource() call failure from instance "' . $this->instance->instance_id_text . '": ' . $_last,
+            Curl::getInfo());
 
         return [];
+    }
+
+    /**
+     * @return string
+     */
+    public function getProvisionedEndpoint()
+    {
+        return $this->instance->getProvisionedEndpoint();
     }
 
     /**
@@ -268,8 +282,9 @@ class InstanceApiClientService extends BaseService
             $_response = Curl::request($method, $this->resourceUri . ltrim($uri, ' /'), $payload, $options);
 
             $_info = Curl::getInfo();
+
             if (false === stripos($_info['content_type'], 'text/html') && Response::HTTP_OK != $_info['http_code']) {
-                \Log::debug('[df.instance-api-client ' . $method . '] possible bad response: ' . print_r($_response, true));
+                $this->debug('[df.instance-api-client ' . $method . '] possible bad response: ' . print_r($_response, true));
             }
         } catch (\Exception $_ex) {
             $this->error('[dfe.instance-api-client] ' . $method . ' failure: ' . $_ex->getMessage());
