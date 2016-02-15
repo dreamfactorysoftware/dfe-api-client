@@ -116,15 +116,11 @@ class InstanceApiClientService extends BaseService
                     //  No bueno. Not activated
                 }
             } else {
-                //@todo Should possibly consider this condition as NOT ACTIVATED
                 $_readyState = InstanceStates::INIT_REQUIRED;
             }
         }
 
-        if (InstanceStates::INIT_REQUIRED == $_readyState) {
-            $_env = false;
-        }
-
+        (InstanceStates::INIT_REQUIRED === $_readyState) && $_env = false;
         $sync && $this->instance->updateInstanceState($_env !== false, true, DeactivationReasons::INCOMPLETE_PROVISION, $_readyState);
 
         return $_env;
