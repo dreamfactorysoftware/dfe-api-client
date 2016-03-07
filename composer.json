@@ -1,6 +1,6 @@
 {
     "name":              "dreamfactory/dfe-api-client",
-    "description":       "DreamFactory Enterprise(tm) Instance API Service Library",
+    "description":       "DreamFactory(tm) Enterprise Instance API Service Package",
     "homepage":          "https://www.dreamfactory.com/",
     "keywords":          [
         "dreamfactory",
@@ -35,11 +35,11 @@
     ],
     "minimum-stability": "dev",
     "require":           {
-        "dreamfactory/dfe-common":   "1.0.*",
-        "dreamfactory/dfe-database": "1.0.*"
+        "dreamfactory/dfe-common":   "dev-feature/l52-upgrade as dev-master",
+        "dreamfactory/dfe-database": "dev-feature/l52-upgrade as dev-master"
     },
     "require-dev":       {
-        "laravel/framework": "~5.1.0",
+        "laravel/framework": "5.2.*",
         "guzzlehttp/guzzle": "~4.0",
         "phpspec/phpspec":   "~2.1",
         "phpunit/phpunit":   "~4.0"
