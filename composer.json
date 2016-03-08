@@ -1,6 +1,6 @@
 {
     "name":              "dreamfactory/dfe-api-client",
-    "description":       "DreamFactory Enterprise(tm) Instance API Service Library",
+    "description":       "DreamFactory(tm) Enterprise Instance API Service Package",
     "homepage":          "https://www.dreamfactory.com/",
     "keywords":          [
         "dreamfactory",
@@ -39,7 +39,7 @@
         "dreamfactory/dfe-database": "1.0.*"
     },
     "require-dev":       {
-        "laravel/framework": "~5.1.0",
+        "laravel/framework": "5.2.*",
         "guzzlehttp/guzzle": "~4.0",
         "phpspec/phpspec":   "~2.1",
         "phpunit/phpunit":   "~4.0"
