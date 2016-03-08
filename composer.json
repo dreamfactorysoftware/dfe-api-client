@@ -35,8 +35,8 @@
     ],
     "minimum-stability": "dev",
     "require":           {
-        "dreamfactory/dfe-common":   "dev-feature/l52-upgrade as dev-master",
-        "dreamfactory/dfe-database": "dev-feature/l52-upgrade as dev-master"
+        "dreamfactory/dfe-common":   "1.0.*",
+        "dreamfactory/dfe-database": "1.0.*"
     },
     "require-dev":       {
         "laravel/framework": "5.2.*",
