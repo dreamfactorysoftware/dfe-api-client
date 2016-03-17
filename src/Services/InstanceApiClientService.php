@@ -76,10 +76,9 @@ class InstanceApiClientService extends BaseService
                 return $_env;
             }
         } catch (Exception $_ex) {
+            //  If we get here, must not be an active instance
+            $this->error('[dfe.instance-api-client] environment() call failure | instance "' . $this->instance->instance_id_text . '"');
         }
-
-        //  If we get here, must not be an active instance
-        $this->error('[dfe.instance-api-client] environment() call failure | instance "' . $this->instance->instance_id_text . '"');
 
         return false;
     }
@@ -107,7 +106,7 @@ class InstanceApiClientService extends BaseService
             if (null !== data_get($_env, 'platform.version_current')) {
                 try {
                     //  Check if fully ready
-                    if (false === ($_admin = $this->resource('admin')) || 1 > count($_admin)) {
+                    if (false === ($_admin = $this->resource('admin')) || 0 == count($_admin)) {
                         $_readyState = InstanceStates::ADMIN_REQUIRED;
                     } else {
                         //  We're good!
@@ -121,7 +120,8 @@ class InstanceApiClientService extends BaseService
             }
         }
 
-        (InstanceStates::INIT_REQUIRED === $_readyState) && $_env = false;
+        //  Sync if requested...
+        (InstanceStates::INIT_REQUIRED == $_readyState) && $_env = false;
         $sync && $this->instance->updateInstanceState(false !== $_env, true, DeactivationReasons::NEVER_ACTIVATED, $_readyState);
 
         return $_env;
@@ -138,12 +138,14 @@ class InstanceApiClientService extends BaseService
             //  Return all system resources
             $_response = (array)$this->get('/?as_list=true');
 
-            return array_get($_response, 'resource', false);
+            if (Response::HTTP_OK == ($_last = Curl::getLastHttpCode()) && !empty($_resource = array_get($_response, 'resource'))) {
+                return $_resource;
+            }
         } catch (Exception $_ex) {
             $this->error('[dfe.instance-api-client] resources() call failure from instance "' . $this->instance->instance_id_text . '"', Curl::getInfo());
-
-            return [];
         }
+
+        return false;
     }
 
     /**
@@ -161,17 +163,14 @@ class InstanceApiClientService extends BaseService
         try {
             $_response = (array)$this->get(Uri::segment([$resource, $id]));
 
-            if (Response::HTTP_OK == ($_last = Curl::getLastHttpCode())) {
-                return array_get($_response, 'resource', false);
+            if (Response::HTTP_OK == ($_last = Curl::getLastHttpCode()) && !empty($_resource = array_get($_response, 'resource'))) {
+                return $_resource;
             }
         } catch (Exception $_ex) {
-            $_last = $_ex->getMessage();
+            $this->error('[dfe.instance-api-client] resource() call failure from instance "' . $this->instance->instance_id_text . '": ' . $_ex->getMessage());
         }
 
-        $this->error('[dfe.instance-api-client] resource() call failure from instance "' . $this->instance->instance_id_text . '": ' . $_last,
-            Curl::getInfo());
-
-        return [];
+        return false;
     }
 
     /**
