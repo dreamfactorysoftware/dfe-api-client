@@ -280,10 +280,12 @@ class InstanceApiClientService extends BaseService
             $_info = Curl::getInfo();
 
             if (false === stripos($_info['content_type'], 'text/html') && Response::HTTP_OK != $_info['http_code']) {
-                $this->debug('[df.instance-api-client ' . $method . '] possible bad response: ' . print_r($_response, true));
+                $this->error('[df.instance-api-client.' . $method . '.' . $uri . '] possible bad response: ' . print_r($_response, true));
+
+                return false;
             }
         } catch (Exception $_ex) {
-            $this->error('[dfe.instance-api-client] ' . $method . ' failure: ' . $_ex->getMessage());
+            $this->error('[df.instance-api-client.' . $method . '.' . $uri . '] failure: ' . $_ex->getMessage());
 
             return false;
         }
