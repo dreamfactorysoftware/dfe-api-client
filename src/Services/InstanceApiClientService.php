@@ -8,6 +8,7 @@ use DreamFactory\Enterprise\Database\Models\Instance;
 use DreamFactory\Library\Utility\Curl;
 use DreamFactory\Library\Utility\Json;
 use DreamFactory\Library\Utility\Uri;
+use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
@@ -74,7 +75,7 @@ class InstanceApiClientService extends BaseService
             if (Response::HTTP_OK == Curl::getLastHttpCode() && null !== data_get($_env, 'platform')) {
                 return $_env;
             }
-        } catch (\Exception $_ex) {
+        } catch (Exception $_ex) {
         }
 
         //  If we get here, must not be an active instance
@@ -92,17 +93,17 @@ class InstanceApiClientService extends BaseService
      */
     public function determineInstanceState($sync = true)
     {
-        $_env = $this->environment();
-
-        if (InstanceStates::READY == $this->instance->ready_state_nbr) {
-            return $_env;
-        }
-
         //  Assume not activated
         $_readyState = InstanceStates::INIT_REQUIRED;
 
-        //  Pull environment and try and determine ready state
-        if (false !== $_env) {
+        //  No environment, no instance...
+        if (false !== $_env = $this->environment()) {
+            //  Are we already "READY"?
+            if (InstanceStates::READY == $this->instance->ready_state_nbr) {
+                return $_env;
+            }
+
+            //  Check environment and determine ready state
             if (null !== data_get($_env, 'platform.version_current')) {
                 try {
                     //  Check if fully ready
@@ -112,7 +113,7 @@ class InstanceApiClientService extends BaseService
                         //  We're good!
                         $_readyState = InstanceStates::READY;
                     }
-                } catch (\Exception $_ex) {
+                } catch (Exception $_ex) {
                     //  No bueno. Not activated
                 }
             } else {
@@ -121,7 +122,7 @@ class InstanceApiClientService extends BaseService
         }
 
         (InstanceStates::INIT_REQUIRED === $_readyState) && $_env = false;
-        $sync && $this->instance->updateInstanceState($_env !== false, true, DeactivationReasons::INCOMPLETE_PROVISION, $_readyState);
+        $sync && $this->instance->updateInstanceState(false !== $_env, true, DeactivationReasons::NEVER_ACTIVATED, $_readyState);
 
         return $_env;
     }
@@ -138,7 +139,7 @@ class InstanceApiClientService extends BaseService
             $_response = (array)$this->get('/?as_list=true');
 
             return array_get($_response, 'resource', false);
-        } catch (\Exception $_ex) {
+        } catch (Exception $_ex) {
             $this->error('[dfe.instance-api-client] resources() call failure from instance "' . $this->instance->instance_id_text . '"', Curl::getInfo());
 
             return [];
@@ -163,7 +164,7 @@ class InstanceApiClientService extends BaseService
             if (Response::HTTP_OK == ($_last = Curl::getLastHttpCode())) {
                 return array_get($_response, 'resource', false);
             }
-        } catch (\Exception $_ex) {
+        } catch (Exception $_ex) {
             $_last = $_ex->getMessage();
         }
 
@@ -282,7 +283,7 @@ class InstanceApiClientService extends BaseService
             if (false === stripos($_info['content_type'], 'text/html') && Response::HTTP_OK != $_info['http_code']) {
                 $this->debug('[df.instance-api-client ' . $method . '] possible bad response: ' . print_r($_response, true));
             }
-        } catch (\Exception $_ex) {
+        } catch (Exception $_ex) {
             $this->error('[dfe.instance-api-client] ' . $method . ' failure: ' . $_ex->getMessage());
 
             return false;
