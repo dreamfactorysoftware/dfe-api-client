@@ -160,6 +160,19 @@ class InstanceApiClientService extends BaseService
     {
         $_last = null;
 
+        //  Remove the setting resource if requested
+        if ('setting' == $resource) {
+            try {
+                if ($this->instance->instanceConnection()->delete('DELETE FROM system_resource WHERE name = :name', [':name' => 'setting'])) {
+                    logger('[dfe.instance-api-client.resource] legacy artifact "setting" removed from system_resource table');
+                }
+            } catch (Exception $_ex) {
+                //  Ignored...
+            }
+
+            return [];
+        }
+
         try {
             $_response = (array)$this->get(Uri::segment([$resource, $id]));
 
