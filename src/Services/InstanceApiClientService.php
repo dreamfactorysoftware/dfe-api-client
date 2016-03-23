@@ -3,16 +3,22 @@
 use DreamFactory\Enterprise\Common\Enums\EnterpriseDefaults;
 use DreamFactory\Enterprise\Common\Enums\InstanceStates;
 use DreamFactory\Enterprise\Common\Services\BaseService;
+use DreamFactory\Enterprise\Common\Traits\Restful;
 use DreamFactory\Enterprise\Database\Enums\DeactivationReasons;
 use DreamFactory\Enterprise\Database\Models\Instance;
 use DreamFactory\Library\Utility\Curl;
-use DreamFactory\Library\Utility\Json;
 use DreamFactory\Library\Utility\Uri;
-use Illuminate\Http\Request;
+use Exception;
 use Illuminate\Http\Response;
 
 class InstanceApiClientService extends BaseService
 {
+    //******************************************************************************
+    //* Traits
+    //******************************************************************************
+
+    use Restful;
+
     //******************************************************************************
     //* Members
     //******************************************************************************
@@ -25,14 +31,6 @@ class InstanceApiClientService extends BaseService
      * @type string The access token to use for communication with instances
      */
     protected $token;
-    /**
-     * @type string The base resource uri to use to talk to the instance
-     */
-    protected $resourceUri;
-    /**
-     * @type array The request headers
-     */
-    protected $headers;
 
     //*************************************************************************
     //* Methods
@@ -52,11 +50,11 @@ class InstanceApiClientService extends BaseService
         $this->instance = $instance;
 
         //  Note trailing slash added...
-        $this->resourceUri = rtrim(Uri::segment([$this->getProvisionedEndpoint(), $instance->getResourceUri()], false), '/') . '/';
+        $this->baseUri = rtrim(Uri::segment([$this->getProvisionedEndpoint(), $instance->getResourceUri()], false), '/') . '/';
 
         //  Set up the channel
         $this->token = $token ?: $this->generateToken([$instance->cluster->cluster_id_text, $instance->instance_id_text]);
-        $this->headers = [$header ?: EnterpriseDefaults::CONSOLE_X_HEADER . ': ' . $this->token,];
+        $this->requestHeaders = [$header ?: EnterpriseDefaults::CONSOLE_X_HEADER . ': ' . $this->token,];
 
         return $this;
     }
@@ -74,7 +72,7 @@ class InstanceApiClientService extends BaseService
             if (Response::HTTP_OK == Curl::getLastHttpCode() && null !== data_get($_env, 'platform')) {
                 return $_env;
             }
-        } catch (\Exception $_ex) {
+        } catch (Exception $_ex) {
         }
 
         //  If we get here, must not be an active instance
@@ -94,25 +92,26 @@ class InstanceApiClientService extends BaseService
     {
         $_env = $this->environment();
 
-        if (InstanceStates::READY == $this->instance->ready_state_nbr) {
-            return $_env;
-        }
-
         //  Assume not activated
         $_readyState = InstanceStates::INIT_REQUIRED;
 
         //  Pull environment and try and determine ready state
         if (false !== $_env) {
+            //  If already marked "READY", just return...
+            if (InstanceStates::READY == $this->instance->ready_state_nbr) {
+                return $_env;
+            }
+
             if (null !== data_get($_env, 'platform.version_current')) {
                 try {
                     //  Check if fully ready
-                    if (false === ($_admin = $this->resource('admin')) || 1 > count($_admin)) {
+                    if (false === ($_admin = $this->resource('admin')) || 0 == count($_admin)) {
                         $_readyState = InstanceStates::ADMIN_REQUIRED;
                     } else {
                         //  We're good!
                         $_readyState = InstanceStates::READY;
                     }
-                } catch (\Exception $_ex) {
+                } catch (Exception $_ex) {
                     //  No bueno. Not activated
                 }
             } else {
@@ -137,11 +136,11 @@ class InstanceApiClientService extends BaseService
             //  Return all system resources
             $_response = (array)$this->get('/?as_list=true');
 
-            return array_get($_response, 'resource', false);
-        } catch (\Exception $_ex) {
+            return data_get($_response, 'resource', false);
+        } catch (Exception $_ex) {
             $this->error('[dfe.instance-api-client] resources() call failure from instance "' . $this->instance->instance_id_text . '"', Curl::getInfo());
 
-            return [];
+            return false;
         }
     }
 
@@ -161,16 +160,16 @@ class InstanceApiClientService extends BaseService
             $_response = (array)$this->get(Uri::segment([$resource, $id]));
 
             if (Response::HTTP_OK == ($_last = Curl::getLastHttpCode())) {
-                return array_get($_response, 'resource', false);
+                return data_get($_response, 'resource', false);
             }
-        } catch (\Exception $_ex) {
+        } catch (Exception $_ex) {
             $_last = $_ex->getMessage();
         }
 
         $this->error('[dfe.instance-api-client] resource() call failure from instance "' . $this->instance->instance_id_text . '": ' . $_last,
             Curl::getInfo());
 
-        return [];
+        return false;
     }
 
     /**
@@ -179,116 +178,6 @@ class InstanceApiClientService extends BaseService
     public function getProvisionedEndpoint()
     {
         return $this->instance->getProvisionedEndpoint();
-    }
-
-    /**
-     * @param string|null $uri
-     * @param array       $payload
-     * @param array       $options
-     *
-     * @return array|bool|\stdClass
-     */
-    public function get($uri = null, $payload = [], $options = [])
-    {
-        return $this->call($uri, $payload, $options, Request::METHOD_GET);
-    }
-
-    /**
-     * @param string $uri
-     * @param array  $payload
-     * @param array  $options
-     *
-     * @return array|bool|\stdClass
-     */
-    public function post($uri, $payload = [], $options = [])
-    {
-        return $this->call($uri, $payload, $options, Request::METHOD_POST);
-    }
-
-    /**
-     * @param string $uri
-     * @param array  $payload
-     * @param array  $options
-     *
-     * @return array|bool|\stdClass
-     */
-    public function put($uri, $payload = [], $options = [])
-    {
-        return $this->call($uri, $payload, $options, Request::METHOD_PUT);
-    }
-
-    /**
-     * @param string $uri
-     * @param array  $payload
-     * @param array  $options
-     *
-     * @return array|bool|\stdClass
-     */
-    public function patch($uri, $payload = [], $options = [])
-    {
-        return $this->call($uri, $payload, $options, Request::METHOD_PATCH);
-    }
-
-    /**
-     * @param string $uri
-     * @param array  $payload
-     * @param array  $options
-     *
-     * @return array|bool|\stdClass
-     */
-    public function delete($uri, $payload = [], $options = [])
-    {
-        return $this->call($uri, $payload, $options, Request::METHOD_DELETE);
-    }
-
-    /**
-     * @param string $method The HTTP method to use
-     * @param string $uri
-     * @param array  $payload
-     * @param array  $options
-     *
-     * @return array|bool|\stdClass
-     */
-    public function any($method, $uri, $payload = [], $options = [])
-    {
-        return $this->call($uri, $payload, $options, $method);
-    }
-
-    /**
-     * Makes a shout out to an instance's private back-end. Should be called bootyCall()  ;)
-     *
-     * @param string $uri     The REST uri (i.e. "/[rest|api][/v[1|2]]/db", "/rest/system/users", etc.) to retrieve
-     *                        from the instance
-     * @param array  $payload Any payload to send with request
-     * @param array  $options Any options to pass to transport layer
-     * @param string $method  The HTTP method. Defaults to "POST"
-     *
-     * @return array|bool|\stdClass
-     */
-    public function call($uri, $payload = [], $options = [], $method = Request::METHOD_POST)
-    {
-        $options[CURLOPT_HTTPHEADER] = array_merge(array_get($options, CURLOPT_HTTPHEADER, []), $this->headers ?: []);
-
-        if (!empty($payload) && !is_scalar($payload)) {
-            $payload = Json::encode($payload);
-            $options[CURLOPT_HTTPHEADER] = array_merge(array_get($options, CURLOPT_HTTPHEADER, []), ['Content-Type: application/json']);
-        }
-
-        try {
-            $_response = Curl::request($method, $this->resourceUri . ltrim($uri, ' /'), $payload, $options);
-
-            $_info = Curl::getInfo();
-
-            if (false === stripos($_info['content_type'], 'text/html') && Response::HTTP_OK != $_info['http_code']) {
-                $this->debug('[df.instance-api-client ' . $method . '] possible bad response: ' . print_r($_response, true));
-            }
-        } catch (\Exception $_ex) {
-            $this->error('[dfe.instance-api-client] ' . $method . ' failure: ' . $_ex->getMessage());
-
-            return false;
-        }
-
-        return $_response;
     }
 
     /**
