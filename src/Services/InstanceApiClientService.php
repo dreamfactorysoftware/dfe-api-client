@@ -73,10 +73,9 @@ class InstanceApiClientService extends BaseService
                 return $_env;
             }
         } catch (Exception $_ex) {
+            //  If we get here, must not be an active instance
+            $this->error('[dfe.instance-api-client] environment() call failure | instance "' . $this->instance->instance_id_text . '"');
         }
-
-        //  If we get here, must not be an active instance
-        $this->error('[dfe.instance-api-client] environment() call failure | instance "' . $this->instance->instance_id_text . '"');
 
         return false;
     }
@@ -90,18 +89,17 @@ class InstanceApiClientService extends BaseService
      */
     public function determineInstanceState($sync = true)
     {
-        $_env = $this->environment();
-
         //  Assume not activated
         $_readyState = InstanceStates::INIT_REQUIRED;
 
-        //  Pull environment and try and determine ready state
-        if (false !== $_env) {
-            //  If already marked "READY", just return...
+        //  No environment, no instance...
+        if (false !== $_env = $this->environment()) {
+            //  Are we already "READY"?
             if (InstanceStates::READY == $this->instance->ready_state_nbr) {
                 return $_env;
             }
 
+            //  Check environment and determine ready state
             if (null !== data_get($_env, 'platform.version_current')) {
                 try {
                     //  Check if fully ready
@@ -119,8 +117,9 @@ class InstanceApiClientService extends BaseService
             }
         }
 
-        (InstanceStates::INIT_REQUIRED === $_readyState) && $_env = false;
-        $sync && $this->instance->updateInstanceState($_env !== false, true, DeactivationReasons::INCOMPLETE_PROVISION, $_readyState);
+        //  Sync if requested...
+        (InstanceStates::INIT_REQUIRED == $_readyState) && $_env = false;
+        $sync && $this->instance->updateInstanceState(false !== $_env, true, DeactivationReasons::NEVER_ACTIVATED, $_readyState);
 
         return $_env;
     }
@@ -136,12 +135,14 @@ class InstanceApiClientService extends BaseService
             //  Return all system resources
             $_response = (array)$this->get('/?as_list=true');
 
-            return data_get($_response, 'resource', false);
+            if (Response::HTTP_OK == ($_last = Curl::getLastHttpCode()) && !empty($_resource = array_get($_response, 'resource'))) {
+                return $_resource;
+            }
         } catch (Exception $_ex) {
             $this->error('[dfe.instance-api-client] resources() call failure from instance "' . $this->instance->instance_id_text . '"', Curl::getInfo());
-
-            return false;
         }
+
+        return false;
     }
 
     /**
@@ -154,20 +155,37 @@ class InstanceApiClientService extends BaseService
      */
     public function resource($resource, $id = null)
     {
-        $_last = null;
+        $_db = $_last = null;
+
+        //  Remove the setting resource if requested
+        if ('setting' == $resource) {
+            try {
+                $_db = $this->instance->instanceConnection();
+
+                if ($_db->delete('DELETE FROM system_resource WHERE name = :name', [':name' => 'setting'])) {
+                    logger('[dfe.instance-api-client.resource] legacy artifact "setting" removed from system_resource table');
+                }
+            } catch (Exception $_ex) {
+                //  Ignored...
+            }
+            finally {
+                //  Make sure we close the connection
+                !empty($_db) && $_db->disconnect();
+                unset($_db);
+            }
+
+            return [];
+        }
 
         try {
             $_response = (array)$this->get(Uri::segment([$resource, $id]));
 
-            if (Response::HTTP_OK == ($_last = Curl::getLastHttpCode())) {
-                return data_get($_response, 'resource', false);
+            if (Response::HTTP_OK == ($_last = Curl::getLastHttpCode()) && !empty($_resource = array_get($_response, 'resource'))) {
+                return $_resource;
             }
         } catch (Exception $_ex) {
-            $_last = $_ex->getMessage();
+            $this->error('[dfe.instance-api-client] resource() call failure from instance "' . $this->instance->instance_id_text . '": ' . $_ex->getMessage());
         }
-
-        $this->error('[dfe.instance-api-client] resource() call failure from instance "' . $this->instance->instance_id_text . '": ' . $_last,
-            Curl::getInfo());
 
         return false;
     }
@@ -181,10 +199,8 @@ class InstanceApiClientService extends BaseService
     }
 
     /**
-     * Creates token to talk to the instance
-     *
-     * @param mixed       $parts     One or more keys/strings to be concatenated to make the hash string
-     * @param string|null $separator The string to delimit the parts
+     * @param array       $parts
+     * @param string|null $separator
      *
      * @return string
      */
