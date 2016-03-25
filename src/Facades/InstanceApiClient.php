@@ -20,6 +20,8 @@ use Illuminate\Support\Facades\Facade;
  * @method static array|bool|\stdClass patch($uri, $payload = [], array $options = [])
  * @method static array|bool|\stdClass any($method, $uri, $payload = [], array $options = [])
  * @method static array|null|bool|\stdClass call($uri, array $payload = [], array $options = [], $method = Request::METHOD_POST)
+ *
+ * @see \DreamFactory\Enterprise\Instance\Ops\Services\InstanceApiClientService
  */
 class InstanceApiClient extends Facade
 {
