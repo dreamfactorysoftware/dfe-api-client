@@ -2,6 +2,7 @@
 
 use DreamFactory\Enterprise\Common\Enums\EnterpriseDefaults;
 use DreamFactory\Enterprise\Common\Enums\InstanceStates;
+use DreamFactory\Enterprise\Common\Enums\OperationalStates;
 use DreamFactory\Enterprise\Common\Services\BaseService;
 use DreamFactory\Enterprise\Common\Traits\Restful;
 use DreamFactory\Enterprise\Database\Enums\DeactivationReasons;
@@ -9,6 +10,7 @@ use DreamFactory\Enterprise\Database\Models\Instance;
 use DreamFactory\Library\Utility\Curl;
 use DreamFactory\Library\Utility\Uri;
 use Exception;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 class InstanceApiClientService extends BaseService
@@ -91,9 +93,41 @@ class InstanceApiClientService extends BaseService
     {
         //  Assume not activated
         $_readyState = InstanceStates::INIT_REQUIRED;
+        $_env = null;
 
-        //  No environment, no instance...
-        if (false !== $_env = $this->environment()) {
+        /**
+         * Try and fast-track the determination. Peek in the instance's database to see how many tables exist...
+         */
+        try {
+            $_db = $this->instance->instanceConnection();
+
+            $_tables =
+                $_db->select('SELECT count(*) AS table_count FROM information_schema.tables WHERE table_schema = :table_schema',
+                    [':table_schema' => $this->instance->db_name_text]);
+
+            $_tables = empty($_tables) ? 0 : $_tables[0]->table_count;
+
+            //  Disconnect and clean up so we don't have orphan connections
+            $_db->disconnect();
+            unset($_db);
+
+            //  If the instance was auto-deactivated, we're done.
+            if (empty($_tables) && $this->instance->platform_state_nbr == OperationalStates::DEACTIVATED && !$this->instance->activate_ind) {
+                return false;
+            }
+        } catch (\Exception $_ex) {
+            \Log::error('[dfe.instance-api-client.determine-instance-state] error contacting instance database: ' . $_ex->getMessage());
+
+            if (isset($_db)) {
+                $_db->disconnect();
+                unset($_db);
+            }
+
+            return false;
+        }
+
+        //  The instance appears initialized, make the environment call
+        if (false !== ($_env = $this->environment())) {
             //  Are we already "READY"?
             if (InstanceStates::READY == $this->instance->ready_state_nbr) {
                 return $_env;
@@ -196,6 +230,64 @@ class InstanceApiClientService extends BaseService
     public function getProvisionedEndpoint()
     {
         return $this->instance->getProvisionedEndpoint();
+    }
+
+    /**
+     * @return bool
+     */
+    public function clearLimitsCache()
+    {
+        try {
+            //  Use instance's call method avoiding resource uri injection
+            $this->instance->call('/instance/clear-limits-cache', [], [], Request::METHOD_DELETE);
+            logger('[dfe.instance-api-client.clear-limits-cache] limits cache flushed by console');
+
+            return true;
+        } catch (\Exception $_ex) {
+            \Log::error('[dfe.instance-api-client.clear-limits-cache] exception clearing limits cache: ' . $_ex->getMessage());
+
+            return false;
+        }
+    }
+
+    /**
+     * @param string $cacheKey The cache key of the counter to delete
+     *
+     * @return bool
+     */
+    public function clearLimitsCounter($cacheKey)
+    {
+        try {
+            //  Use instance's call method avoiding resource uri injection
+            $this->instance->call('/instance/clear-limits-counter?cacheKey=' . urlencode($cacheKey), [], [], Request::METHOD_DELETE);
+            logger('[dfe.instance-api-client.clear-limits-counter] limits counter "' . $cacheKey . '" cleared by console');
+
+            return true;
+        } catch (\Exception $_ex) {
+            \Log::error('[dfe.instance-api-client.clear-limits-counter] exception clearing limits counter: ' . $_ex->getMessage());
+
+            return false;
+        }
+    }
+
+    /**
+     * Deletes all cached managed data for instance
+     *
+     * @return Response
+     */
+    public function deleteManagedDataCache()
+    {
+        try {
+            //  Use instance's call method avoiding resource uri injection
+            $this->instance->call('/instance/managed-data-cache', [], [], Request::METHOD_DELETE);
+            logger('[dfe.instance-api-client.delete-managed-data-cache] managed instance cache cleared by console');
+
+            return true;
+        } catch (\Exception $_ex) {
+            \Log::error('[dfe.instance-api-client.delete-managed-data-cache] exception clearing managed instance cache: ' . $_ex->getMessage());
+
+            return false;
+        }
     }
 
     /**
