@@ -9,7 +9,7 @@ use DreamFactory\Enterprise\Database\Enums\DeactivationReasons;
 use DreamFactory\Enterprise\Database\Models\Instance;
 use DreamFactory\Library\Utility\Curl;
 use DreamFactory\Library\Utility\Uri;
-use Exception;
+use Illuminate\Database\Connection;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
@@ -33,6 +33,10 @@ class InstanceApiClientService extends BaseService
      * @type string The access token to use for communication with instances
      */
     protected $token;
+    /**
+     * @type Connection
+     */
+    protected $db;
 
     //*************************************************************************
     //* Methods
@@ -44,21 +48,37 @@ class InstanceApiClientService extends BaseService
      * @param Instance    $instance
      * @param string|null $token  The token to use instead of automatic one
      * @param string|null $header The HTTP header to use instead of DFE one
+     * @param bool        $db     If true, open the instance database
      *
      * @return $this
      */
-    public function connect(Instance $instance, $token = null, $header = null)
+    public function connect(Instance $instance, $token = null, $header = null, $db = true)
     {
         $this->instance = $instance;
 
         //  Note trailing slash added...
-        $this->baseUri = rtrim(Uri::segment([$this->getProvisionedEndpoint(), $instance->getResourceUri()], false), '/') . '/';
+        $this->baseUri = rtrim(Uri::segment([$this->instance->getProvisionedEndpoint(), $instance->getResourceUri()], false), '/') . '/';
 
         //  Set up the channel
         $this->token = $token ?: $this->generateToken([$instance->cluster->cluster_id_text, $instance->instance_id_text]);
         $this->requestHeaders = [$header ?: EnterpriseDefaults::CONSOLE_X_HEADER . ': ' . $this->token,];
 
+        //  Open the database if wanted
+        $db && $this->db = $this->instance->instanceConnection();
+
         return $this;
+    }
+
+    /**
+     * Stay-puft
+     */
+    public function __destruct()
+    {
+        //  Make sure the database is disconnected before we go
+        if (!empty($this->db)) {
+            $this->db->disconnect();
+            unset($this->db);
+        }
     }
 
     /**
@@ -74,9 +94,10 @@ class InstanceApiClientService extends BaseService
             if (Response::HTTP_OK == Curl::getLastHttpCode() && null !== data_get($_env, 'platform')) {
                 return $_env;
             }
-        } catch (Exception $_ex) {
+        } catch (\Exception $_ex) {
             //  If we get here, must not be an active instance
-            $this->error('[dfe.instance-api-client] environment() call failure | instance "' . $this->instance->instance_id_text . '"');
+            $this->error('[dfe.instance-api-client.environment] instance "' . $this->instance->instance_id_text . '" call failure: ' . $_ex->getMessage(),
+                ['info' => Curl::getInfo()]);
         }
 
         return false;
@@ -91,63 +112,43 @@ class InstanceApiClientService extends BaseService
      */
     public function determineInstanceState($sync = true)
     {
+        //  Already activated? We're done here
+        if ($this->instance->activate_ind && $this->instance->ready_state_nbr == InstanceStates::READY) {
+            return $this->environment();
+        }
+
         //  Assume not activated
         $_readyState = InstanceStates::INIT_REQUIRED;
         $_env = null;
 
-        /**
-         * Try and fast-track the determination. Peek in the instance's database to see how many tables exist...
-         */
-        try {
-            $_db = $this->instance->instanceConnection();
-
-            $_tables =
-                $_db->select('SELECT count(*) AS table_count FROM information_schema.tables WHERE table_schema = :table_schema',
-                    [':table_schema' => $this->instance->db_name_text]);
-
-            $_tables = empty($_tables) ? 0 : $_tables[0]->table_count;
-
-            //  Disconnect and clean up so we don't have orphan connections
-            $_db->disconnect();
-            unset($_db);
-
-            //  If the instance was auto-deactivated, we're done.
-            if (empty($_tables) && $this->instance->platform_state_nbr == OperationalStates::DEACTIVATED && !$this->instance->activate_ind) {
+        //  Crack open the database and see how many tables we have
+        if (false === ($_count = $this->getInstanceTableCount())) {
+            //  But if we're already marked bogus, we're done here
+            if ($this->instance->platform_state_nbr == OperationalStates::DEACTIVATED && !$this->instance->activate_ind) {
                 return false;
             }
-        } catch (\Exception $_ex) {
-            \Log::error('[dfe.instance-api-client.determine-instance-state] error contacting instance database: ' . $_ex->getMessage());
-
-            if (isset($_db)) {
-                $_db->disconnect();
-                unset($_db);
-            }
-
-            return false;
         }
 
-        //  The instance appears initialized, make the environment call
-        if (false !== ($_env = $this->environment())) {
-            //  Are we already "READY"?
-            if (InstanceStates::READY == $this->instance->ready_state_nbr) {
-                return $_env;
-            }
-
-            //  Check environment and determine ready state
-            if (null !== data_get($_env, 'platform.version_current')) {
-                try {
-                    //  Check if fully ready
-                    if (false === ($_admin = $this->resource('admin')) || 0 == count($_admin)) {
-                        $_readyState = InstanceStates::ADMIN_REQUIRED;
-                    } else {
-                        //  We're good!
-                        $_readyState = InstanceStates::READY;
+        //  If the instance appears initialized, make the environment call
+        if (false !== $_count && false !== ($_env = $this->environment())) {
+            //  If not ready, figure out what it is
+            if (InstanceStates::READY != $this->instance->ready_state_nbr) {
+                //  Check environment and determine ready state
+                if (null !== data_get($_env, 'platform.version_current')) {
+                    try {
+                        //  Check if fully ready
+                        if (false === ($_admin = $this->resource('admin')) || 0 == count($_admin)) {
+                            $_readyState = InstanceStates::ADMIN_REQUIRED;
+                        } else {
+                            //  We're good!
+                            $_readyState = InstanceStates::READY;
+                        }
+                    } catch (\Exception $_ex) {
+                        //  No bueno. Not activated
                     }
-                } catch (Exception $_ex) {
-                    //  No bueno. Not activated
+                } else {
+                    $_readyState = InstanceStates::INIT_REQUIRED;
                 }
-            } else {
-                $_readyState = InstanceStates::INIT_REQUIRED;
             }
         }
 
@@ -169,11 +170,11 @@ class InstanceApiClientService extends BaseService
             //  Return all system resources
             $_response = (array)$this->get('/?as_list=true');
 
-            if (Response::HTTP_OK == ($_last = Curl::getLastHttpCode()) && !empty($_resource = array_get($_response, 'resource'))) {
+            if (Response::HTTP_OK == Curl::getLastHttpCode() && !empty($_resource = array_get($_response, 'resource'))) {
                 return $_resource;
             }
-        } catch (Exception $_ex) {
-            $this->error('[dfe.instance-api-client] resources() call failure from instance "' . $this->instance->instance_id_text . '"', Curl::getInfo());
+        } catch (\Exception $_ex) {
+            $this->error('[dfe.instance-api-client.resources] instance "' . $this->instance->instance_id_text . '" call failed', ['info' => Curl::getInfo()]);
         }
 
         return false;
@@ -189,47 +190,18 @@ class InstanceApiClientService extends BaseService
      */
     public function resource($resource, $id = null)
     {
-        $_db = $_last = null;
-
-        //  Remove the setting resource if requested
-        if ('setting' == $resource) {
-            try {
-                $_db = $this->instance->instanceConnection();
-
-                if ($_db->delete('DELETE FROM system_resource WHERE name = :name', [':name' => 'setting'])) {
-                    logger('[dfe.instance-api-client.resource] legacy artifact "setting" removed from system_resource table');
-                }
-            } catch (Exception $_ex) {
-                //  Ignored...
-            }
-            finally {
-                //  Make sure we close the connection
-                !empty($_db) && $_db->disconnect();
-                unset($_db);
-            }
-
-            return [];
-        }
-
         try {
             $_response = (array)$this->get(Uri::segment([$resource, $id]));
 
-            if (Response::HTTP_OK == ($_last = Curl::getLastHttpCode()) && !empty($_resource = array_get($_response, 'resource'))) {
+            if (Response::HTTP_OK == Curl::getLastHttpCode() && !empty($_resource = data_get($_response, 'resource'))) {
                 return $_resource;
             }
-        } catch (Exception $_ex) {
-            $this->error('[dfe.instance-api-client] resource() call failure from instance "' . $this->instance->instance_id_text . '": ' . $_ex->getMessage());
+        } catch (\Exception $_ex) {
+            $this->error('[dfe.instance-api-client.resource] instance "' . $this->instance->instance_id_text . '" call failed: ' . $_ex->getMessage(),
+                ['resource' => $resource, 'id' => $id, 'info' => Curl::getInfo()]);
         }
 
         return false;
-    }
-
-    /**
-     * @return string
-     */
-    public function getProvisionedEndpoint()
-    {
-        return $this->instance->getProvisionedEndpoint();
     }
 
     /**
@@ -301,5 +273,86 @@ class InstanceApiClientService extends BaseService
         $parts = is_array($parts) ? $parts : $parts = func_get_args();
 
         return hash(config('dfe.signature-method', EnterpriseDefaults::DEFAULT_SIGNATURE_METHOD), implode('', $parts));
+    }
+
+    /**
+     * @return bool|int
+     */
+    protected function getInstanceTableCount()
+    {
+        $_count = false;
+
+        try {
+            $_tables = $this->getConnection()->getDoctrineSchemaManager()->listTables();
+
+            if (!empty($_count = count($_tables))) {
+                //  A chance to clean up old junk
+                $this->removeLegacySettings();
+            }
+        } catch (\Exception $_ex) {
+            \Log::error('[dfe.instance-api-client.get-instance-table-count] error contacting instance database: ' . $_ex->getMessage());
+        }
+
+        return $_count;
+    }
+
+    /**
+     * Remove any legacy settings that were otherwise missed
+     */
+    protected function removeLegacySettings()
+    {
+        try {
+            if ($this->getConnection()->delete('DELETE FROM system_resource WHERE name = :name', [':name' => 'setting'])) {
+                logger('[dfe.instance-api-client.remove-legacy-settings] legacy artifact "setting" removed from system_resource table');
+            }
+        } catch (\Exception $_ex) {
+            //  Ignored...
+        }
+
+        return $this;
+    }
+
+    /**
+     * Call any instance method bypass
+     *
+     * @param string $name
+     * @param array  $arguments
+     *
+     * @return mixed
+     */
+    public function __call($name, $arguments)
+    {
+        try {
+            return call_user_func_array([$this->instance, $name], $arguments);
+        } catch (\Exception $_ex) {
+            throw new \BadMethodCallException('Method "' . $name . '" not found');
+        }
+    }
+
+    /**
+     * Call any static instance method bypass
+     *
+     * @param string $name
+     * @param array  $arguments
+     *
+     * @return mixed
+     */
+    public function __callStatic($name, $arguments)
+    {
+        try {
+            return call_user_func_array([get_class($this->instance), $name], $arguments);
+        } catch (\Exception $_ex) {
+            throw new \BadMethodCallException('Method "' . $name . '" not found');
+        }
+    }
+
+    /**
+     * Retrieves the current instance database connection
+     *
+     * @return \Illuminate\Database\Connection
+     */
+    protected function getConnection()
+    {
+        return $this->db ?: $this->db = $this->instance->instanceConnection();
     }
 }
