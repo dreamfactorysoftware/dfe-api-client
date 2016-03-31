@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Facade;
 
 /**
  * @method static InstanceApiClientService connect(Instance $instance, $token = null, $header = null)
+ * @method static InstanceApiClientService disconnect()
  * @method static string getProvisionedEndpoint()
  * @method static array|bool|\stdClass environment()
  * @method static array|bool determineInstanceState($sync = false)
