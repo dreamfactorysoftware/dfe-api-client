@@ -9,7 +9,6 @@ use DreamFactory\Enterprise\Database\Enums\DeactivationReasons;
 use DreamFactory\Enterprise\Database\Models\Instance;
 use DreamFactory\Library\Utility\Curl;
 use DreamFactory\Library\Utility\Uri;
-use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 class InstanceApiClientService extends BaseService
@@ -32,6 +31,10 @@ class InstanceApiClientService extends BaseService
      * @type string The access token to use for communication with instances
      */
     protected $token;
+    /**
+     * @type bool Indicates an admin is required
+     */
+    protected $needsAdmin;
 
     //*************************************************************************
     //* Methods
@@ -56,11 +59,13 @@ class InstanceApiClientService extends BaseService
         $this->instance = $instance;
 
         //  Note trailing slash added...
-        $this->baseUri = rtrim(Uri::segment([$this->instance->getProvisionedEndpoint(), $instance->getResourceUri()], false), '/') . '/';
+        $this->baseUri = rtrim(Uri::segment([$this->instance->getProvisionedEndpoint()], false), '/') . '/';
+        $this->resourceUri = $instance->getResourceUri();
 
         //  Set up the channel
         $this->token = $token ?: $this->generateToken([$instance->cluster->cluster_id_text, $instance->instance_id_text]);
         $this->requestHeaders = [$header ?: EnterpriseDefaults::CONSOLE_X_HEADER . ': ' . $this->token,];
+        $this->needsAdmin = false;
 
         return $this;
     }
@@ -70,7 +75,7 @@ class InstanceApiClientService extends BaseService
      */
     public function disconnect()
     {
-        $this->instance = $this->baseUri = $this->token = $this->requestHeaders = null;
+        $this->instance = $this->baseUri = $this->resourceUri = $this->token = $this->requestHeaders = null;
     }
 
     /**
@@ -118,6 +123,7 @@ class InstanceApiClientService extends BaseService
         }
 
         //  Assume not activated
+        $this->needsAdmin = false;
         $_readyState = InstanceStates::INIT_REQUIRED;
         $_env = null;
 
@@ -153,6 +159,7 @@ class InstanceApiClientService extends BaseService
         }
 
         //  Sync if requested...
+        $this->needsAdmin && $_readyState = InstanceStates::ADMIN_REQUIRED;
         (InstanceStates::INIT_REQUIRED == $_readyState) && $_env = false;
         $sync && $this->instance->updateInstanceState(false !== $_env, true, DeactivationReasons::NEVER_ACTIVATED, $_readyState);
 
@@ -211,7 +218,7 @@ class InstanceApiClientService extends BaseService
     {
         try {
             //  Use instance's call method avoiding resource uri injection
-            $this->instance->call('/instance/clear-limits-cache', [], [], Request::METHOD_DELETE);
+            $_result = (array)$this->delete('/instance/clear-limits-cache', [], [], true);
             logger('[dfe.instance-api-client.clear-limits-cache] limits cache flushed by console');
 
             return true;
@@ -231,7 +238,7 @@ class InstanceApiClientService extends BaseService
     {
         try {
             //  Use instance's call method avoiding resource uri injection
-            $this->instance->call('/instance/clear-limits-counter?cacheKey=' . urlencode($cacheKey), [], [], Request::METHOD_DELETE);
+            $_result = (array)$this->delete('/instance/clear-limits-counter?cacheKey=' . urlencode($cacheKey), [], [], true);
             logger('[dfe.instance-api-client.clear-limits-counter] limits counter "' . $cacheKey . '" cleared by console');
 
             return true;
@@ -251,7 +258,7 @@ class InstanceApiClientService extends BaseService
     {
         try {
             //  Use instance's call method avoiding resource uri injection
-            $this->instance->call('/instance/managed-data-cache', [], [], Request::METHOD_DELETE);
+            $_result = (array)$this->delete('/instance/managed-data-cache', [], [], true);
             logger('[dfe.instance-api-client.delete-managed-data-cache] managed instance cache cleared by console');
 
             return true;
@@ -263,29 +270,23 @@ class InstanceApiClientService extends BaseService
     }
 
     /**
-     * @param array       $parts
-     * @param string|null $separator
-     *
-     * @return string
-     */
-    protected function generateToken($parts = [], $separator = null)
-    {
-        $parts = is_array($parts) ? $parts : $parts = func_get_args();
-
-        return hash(config('dfe.signature-method', EnterpriseDefaults::DEFAULT_SIGNATURE_METHOD), implode('', $parts));
-    }
-
-    /**
      * @return bool|int
      */
     public function getInstanceTableCount()
     {
+        $this->needsAdmin = false;
+
         try {
             //  Use instance's call method avoiding resource uri injection
-            $_response = $this->instance->call('/instance/table-count', [], [], Request::METHOD_GET);
+            $_response = $this->get('/instance/table-count', [], [], true);
 
             if (is_object($_response) && isset($_response->count)) {
                 return $_response->count;
+            }
+
+            //  Catch admin required here
+            if (is_string($_response) && false !== stripos($_response, 'first admin')) {
+                $this->needsAdmin = true;
             }
         } catch (\Exception $_ex) {
             \Log::error('[dfe.instance-api-client.get-instance-table-count] exception getting table counts: ' . $_ex->getMessage());
@@ -326,5 +327,18 @@ class InstanceApiClientService extends BaseService
         } catch (\Exception $_ex) {
             throw new \BadMethodCallException('Method "' . $name . '" not found');
         }
+    }
+
+    /**
+     * @param array       $parts
+     * @param string|null $separator
+     *
+     * @return string
+     */
+    protected function generateToken($parts = [], $separator = null)
+    {
+        $parts = is_array($parts) ? $parts : $parts = func_get_args();
+
+        return hash(config('dfe.signature-method', EnterpriseDefaults::DEFAULT_SIGNATURE_METHOD), implode('', $parts));
     }
 }
