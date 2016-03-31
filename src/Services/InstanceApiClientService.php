@@ -9,7 +9,6 @@ use DreamFactory\Enterprise\Database\Enums\DeactivationReasons;
 use DreamFactory\Enterprise\Database\Models\Instance;
 use DreamFactory\Library\Utility\Curl;
 use DreamFactory\Library\Utility\Uri;
-use Illuminate\Database\Connection;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
@@ -33,10 +32,6 @@ class InstanceApiClientService extends BaseService
      * @type string The access token to use for communication with instances
      */
     protected $token;
-    /**
-     * @type Connection
-     */
-    protected $db;
 
     //*************************************************************************
     //* Methods
@@ -48,11 +43,10 @@ class InstanceApiClientService extends BaseService
      * @param Instance    $instance
      * @param string|null $token  The token to use instead of automatic one
      * @param string|null $header The HTTP header to use instead of DFE one
-     * @param bool        $db     If true, open the instance database
      *
      * @return $this
      */
-    public function connect(Instance $instance, $token = null, $header = null, $db = true)
+    public function connect(Instance $instance, $token = null, $header = null)
     {
         //  Clean up old connection
         if (!empty($this->instance)) {
@@ -68,9 +62,6 @@ class InstanceApiClientService extends BaseService
         $this->token = $token ?: $this->generateToken([$instance->cluster->cluster_id_text, $instance->instance_id_text]);
         $this->requestHeaders = [$header ?: EnterpriseDefaults::CONSOLE_X_HEADER . ': ' . $this->token,];
 
-        //  Open the database if wanted
-        $db && $this->db = $this->instance->instanceConnection();
-
         return $this;
     }
 
@@ -79,12 +70,6 @@ class InstanceApiClientService extends BaseService
      */
     public function disconnect()
     {
-        //  Disconnect the database
-        if ($this->db instanceof Connection) {
-            \DB::disconnect($this->instance->instance_id_text);
-            $this->db = null;
-        }
-
         $this->instance = $this->baseUri = $this->token = $this->requestHeaders = null;
     }
 
@@ -293,38 +278,20 @@ class InstanceApiClientService extends BaseService
     /**
      * @return bool|int
      */
-    protected function getInstanceTableCount()
-    {
-        $_count = false;
-
-        try {
-            $_tables = $this->getConnection()->getDoctrineSchemaManager()->listTables();
-
-            if (!empty($_count = count($_tables))) {
-                //  A chance to clean up old junk
-                $this->removeLegacySettings();
-            }
-        } catch (\Exception $_ex) {
-            \Log::error('[dfe.instance-api-client.get-instance-table-count] error contacting instance database: ' . $_ex->getMessage());
-        }
-
-        return $_count;
-    }
-
-    /**
-     * Remove any legacy settings that were otherwise missed
-     */
-    protected function removeLegacySettings()
+    public function getInstanceTableCount()
     {
         try {
-            if ($this->getConnection()->delete('DELETE FROM system_resource WHERE name = :name', [':name' => 'setting'])) {
-                logger('[dfe.instance-api-client.remove-legacy-settings] legacy artifact "setting" removed from system_resource table');
+            //  Use instance's call method avoiding resource uri injection
+            $_response = $this->instance->call('/instance/table-count', [], [], Request::METHOD_GET);
+
+            if (is_object($_response) && isset($_response->count)) {
+                return $_response->count;
             }
         } catch (\Exception $_ex) {
-            //  Ignored...
+            \Log::error('[dfe.instance-api-client.get-instance-table-count] exception getting table counts: ' . $_ex->getMessage());
         }
 
-        return $this;
+        return false;
     }
 
     /**
@@ -359,15 +326,5 @@ class InstanceApiClientService extends BaseService
         } catch (\Exception $_ex) {
             throw new \BadMethodCallException('Method "' . $name . '" not found');
         }
-    }
-
-    /**
-     * Retrieves the current instance database connection
-     *
-     * @return \Illuminate\Database\Connection
-     */
-    protected function getConnection()
-    {
-        return $this->db ?: $this->db = $this->instance->instanceConnection();
     }
 }
