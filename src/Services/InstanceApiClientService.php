@@ -54,6 +54,11 @@ class InstanceApiClientService extends BaseService
      */
     public function connect(Instance $instance, $token = null, $header = null, $db = true)
     {
+        //  Clean up old connection
+        if (!empty($this->instance)) {
+            $this->disconnect();
+        }
+
         $this->instance = $instance;
 
         //  Note trailing slash added...
@@ -70,15 +75,24 @@ class InstanceApiClientService extends BaseService
     }
 
     /**
+     * Disconnect from the instance
+     */
+    public function disconnect()
+    {
+        $this->instance = $this->baseUri = $this->token = $this->requestHeaders = null;
+
+        if (!empty($this->db)) {
+            $this->db->disconnect();
+            $this->db = null;
+        }
+    }
+
+    /**
      * Stay-puft
      */
     public function __destruct()
     {
-        //  Make sure the database is disconnected before we go
-        if (!empty($this->db)) {
-            $this->db->disconnect();
-            unset($this->db);
-        }
+        $this->disconnect();
     }
 
     /**
