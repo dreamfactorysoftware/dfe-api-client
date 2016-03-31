@@ -79,12 +79,13 @@ class InstanceApiClientService extends BaseService
      */
     public function disconnect()
     {
-        $this->instance = $this->baseUri = $this->token = $this->requestHeaders = null;
-
-        if (!empty($this->db)) {
-            $this->db->disconnect();
+        //  Disconnect the database
+        if ($this->db instanceof Connection) {
+            \DB::disconnect($this->instance->instance_id_text);
             $this->db = null;
         }
+
+        $this->instance = $this->baseUri = $this->token = $this->requestHeaders = null;
     }
 
     /**
