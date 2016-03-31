@@ -337,10 +337,10 @@ class InstanceApiClientService extends BaseService
      *
      * @return mixed
      */
-    public function __callStatic($name, $arguments)
+    public static function __callStatic($name, $arguments)
     {
         try {
-            return call_user_func_array([get_class($this->instance), $name], $arguments);
+            return call_user_func_array([Instance::class, $name], $arguments);
         } catch (\Exception $_ex) {
             throw new \BadMethodCallException('Method "' . $name . '" not found');
         }
