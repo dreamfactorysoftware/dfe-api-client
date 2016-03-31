@@ -1,4 +1,4 @@
-## DreamFactory Enterprise(tm) Instance API Service Library v1.0.7
+## DreamFactory Enterprise(tm) Instance API Service Library v1.0.8
 See the [DreamFactory](https://www.dreamfactory.com/) site for more information
 
 ## Usage
